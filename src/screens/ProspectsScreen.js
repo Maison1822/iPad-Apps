@@ -188,7 +188,7 @@ export default function ProspectsScreen(){
       </View>
 
       {/* Filtres */}
-      <View style={{paddingHorizontal:16,paddingBottom:8,flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={{paddingHorizontal:16,paddingBottom:8,gap:8,alignItems:'center'}}>
         {/* Favori */}
         <TouchableOpacity style={[s.chip,filtreFavori&&s.chipActive]} onPress={()=>setFiltreFavori(v=>!v)}>
           <Text style={[s.chipTxt,filtreFavori&&s.chipTxtActive]}>{filtreFavori?'★ Favoris':'☆ Favoris'}</Text>
@@ -207,11 +207,11 @@ export default function ProspectsScreen(){
             <Text style={[s.chipTxt,filtreStatut===st&&s.chipTxtActive]}>{st}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Filtres catégorie — ligne 2 */}
       {categories.length>0&&(
-        <View style={{paddingHorizontal:16,paddingBottom:8,flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={{paddingHorizontal:16,paddingBottom:8,gap:8,alignItems:'center'}}>
           <TouchableOpacity style={[s.chip,filtreCategorie==='Tous'&&s.chipActive]} onPress={()=>setFiltreCategorie('Tous')}>
             <Text style={[s.chipTxt,filtreCategorie==='Tous'&&s.chipTxtActive]}>Toutes catégories</Text>
           </TouchableOpacity>
@@ -220,12 +220,12 @@ export default function ProspectsScreen(){
               <Text style={[s.chipTxt,filtreCategorie===cat&&s.chipTxtActive]}>{cat}</Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       )}
 
 
       {/* Tris */}
-      <View style={{paddingHorizontal:16,paddingBottom:8,flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={{paddingHorizontal:16,paddingBottom:8,gap:8,alignItems:'center'}}>
         <Text style={{color:MUTED,fontSize:12}}>Trier :</Text>
         {TRIS.map(x=>(
           <TouchableOpacity key={x.id} style={[s.chip,tri===x.id&&s.chipActive]}
@@ -233,13 +233,14 @@ export default function ProspectsScreen(){
             <Text style={[s.chipTxt,tri===x.id&&s.chipTxtActive]}>{x.label}{tri===x.id?(triSens==='asc'?' ↑':' ↓'):''}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       <Text style={{paddingHorizontal:20,paddingBottom:4,fontSize:11,color:MUTED}}>{liste.length} prospect{liste.length>1?'s':''}</Text>
 
       {loading
         ?<ActivityIndicator color={GOLD} size="large" style={{marginTop:60}}/>
         :<FlatList
+          style={{flex:1}}
           data={liste}
           keyExtractor={item=>item.id}
           renderItem={({item})=><ProspectRow item={item}/>}

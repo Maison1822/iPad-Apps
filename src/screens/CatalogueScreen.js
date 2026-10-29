@@ -62,7 +62,7 @@ export default function CatalogueScreen(){
     try{
       const{data,error}=await supabase.from('Catalogue App')
         .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise')
-        .order('producteur').limit(500);
+        .order('producteur').limit(1000);
       if(error)Alert.alert('Erreur',JSON.stringify(error));
       else if(data){
         // Filtrer uniquement les vins avec marge nette > 30% (paliers_autorises_cache)

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as Updates from 'expo-updates';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, AppState } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, AppState, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,6 +11,8 @@ import DevisScreen from './src/screens/DevisScreen';
 import CommandesScreen from './src/screens/CommandesScreen';
 import ScanScreen from './src/screens/ScanScreen';
 import ProspectsScreen from './src/screens/ProspectsScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import { supabase } from './src/lib/supabase';
 
 const NAVY = '#1C1C1E';
 const GOLD = '#C8A45A';
@@ -73,6 +75,21 @@ function Nav() {
 }
 
 export default function App() {
+  // Session Supabase : connexion requise avant d'afficher l'application
+  const [session, setSession] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setCheckingSession(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
   // Auto-update : au démarrage ET à chaque remise au premier plan
   const appState = useRef(AppState.currentState);
 
@@ -102,6 +119,23 @@ export default function App() {
 
     return () => subscription.remove();
   }, []);
+
+  if (checkingSession) {
+    return (
+      <View style={{ flex: 1, backgroundColor: NAVY, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={GOLD} />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <LoginScreen />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>

@@ -11,6 +11,7 @@ import DevisScreen from './src/screens/DevisScreen';
 import CommandesScreen from './src/screens/CommandesScreen';
 import ScanScreen from './src/screens/ScanScreen';
 import ProspectsScreen from './src/screens/ProspectsScreen';
+import SimulateurScreen from './src/screens/SimulateurScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { supabase } from './src/lib/supabase';
 
@@ -18,7 +19,7 @@ const NAVY = '#1C1C1E';
 const GOLD = '#C8A45A';
 const Tab = createBottomTabNavigator();
 
-const ICONS = { Catalogue: '🍷', Clients: '👥', Devis: '📋', Commandes: '📦', Scan: '🔍', Prospects: '🎯' };
+const ICONS = { Catalogue: '🍷', Simulateur: '🧮', Clients: '👥', Devis: '📋', Commandes: '📦', Scan: '🔍', Prospects: '🎯' };
 
 function LangSelector() {
   const { lang, setLang } = useApp();
@@ -65,6 +66,7 @@ function Nav() {
       ),
     })}>
       <Tab.Screen name="Catalogue" component={CatalogueScreen} options={{ title: t.catalogue }} />
+      <Tab.Screen name="Simulateur" component={SimulateurScreen} options={{ title: 'Prix' }} />
       <Tab.Screen name="Clients" component={ClientsScreen} options={{ title: t.clients }} />
       <Tab.Screen name="Devis" component={DevisScreen} options={{ title: t.devis }} />
       <Tab.Screen name="Commandes" component={CommandesScreen} options={{ title: t.commandes }} />

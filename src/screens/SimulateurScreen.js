@@ -50,6 +50,7 @@ export default function SimulateurScreen(){
   const [type,setType]=useState('Tranquille');
   const [alcool,setAlcool]=useState('13');
   const [ncmId,setNcmId]=useState(null);
+  const [pays,setPays]=useState(null);
   const [regionKey,setRegionKey]=useState(null);
   const [appellation,setAppellation]=useState(null);
   const [etat,setEtat]=useState('SC');
@@ -70,27 +71,28 @@ export default function SimulateurScreen(){
     });
   },[]);
 
-  // Cascade : Région (pays · région) → Appellations de cette seule région
-  const regionsList=useMemo(()=>{
-    const m=new Map();
-    refs.appellations.forEach(a=>{
-      if(!a.region)return;
-      const k=`${a.pays}|${a.region}`;
-      if(!m.has(k))m.set(k,{key:k,region:a.region,pays:a.pays||''});
-    });
-    return [...m.values()].sort((x,y)=>x.pays.localeCompare(y.pays)||x.region.localeCompare(y.region));
+  // Cascade : Pays → Région → Appellation
+  const paysList=useMemo(()=>{
+    const set=new Set(refs.appellations.map(a=>a.pays).filter(Boolean));
+    return [...set].sort((x,y)=>x.localeCompare(y,'fr'));
   },[refs]);
 
+  // Régions du pays choisi, casse unifiée pour fusionner les doublons (ALSACE / Alsace)
+  const regionsList=useMemo(()=>{
+    if(!pays)return [];
+    const set=new Set(refs.appellations.filter(a=>a.pays===pays&&a.region).map(a=>a.region.trim().toUpperCase()));
+    return [...set].sort((x,y)=>x.localeCompare(y,'fr')).map(r=>({key:r,label:r}));
+  },[refs,pays]);
+
   const regionChoisie=regionsList.find(r=>r.key===regionKey)||null;
-  const region=regionChoisie?regionChoisie.region:null;
 
   const appellations=useMemo(()=>{
     if(!regionChoisie)return [];
     const liste=refs.appellations
-      .filter(a=>a.region===regionChoisie.region&&(a.pays||'')===regionChoisie.pays)
+      .filter(a=>a.pays===pays&&a.region&&a.region.trim().toUpperCase()===regionChoisie.key)
       .map(a=>a.appellation).filter(Boolean);
-    return [...new Set(liste)].sort();
-  },[refs,regionChoisie]);
+    return [...new Set(liste)].sort((x,y)=>x.localeCompare(y,'fr'));
+  },[refs,pays,regionChoisie]);
 
   const ncmChoisi=refs.ncm.find(n=>n.id===ncmId);
 
@@ -126,7 +128,7 @@ export default function SimulateurScreen(){
         p_prix_achat:a,
         p_tolerance:TOLERANCE,
         p_appellation:appellation,
-        p_region:region,
+        p_region:null,
         p_type:type,
         p_limit:10,
       });
@@ -134,7 +136,7 @@ export default function SimulateurScreen(){
       setSimilaires(error?[]:(data||[]));
     },400);
     return()=>clearTimeout(t);
-  },[origine,achat,appellation,region,type]);
+  },[origine,achat,appellation,type]);
 
   return(
     <ScrollView style={s.container} contentContainerStyle={{paddingBottom:100}}>
@@ -175,11 +177,20 @@ export default function SimulateurScreen(){
           </ChipsScroll>
           {!!ncmChoisi&&<Text style={s.aide}>{ncmChoisi.description}</Text>}
 
-          <Text style={s.label}>Région</Text>
+          <Text style={s.label}>Pays</Text>
           <ChipsScroll>
-            <Chip label="Aucune" active={regionKey===null} onPress={()=>{setRegionKey(null);setAppellation(null);}}/>
-            {regionsList.map(r=>(<Chip key={r.key} label={`${r.region} · ${r.pays}`} active={regionKey===r.key} onPress={()=>{setRegionKey(r.key);setAppellation(null);}}/>))}
+            {paysList.map(p=>(<Chip key={p} label={p} active={pays===p} onPress={()=>{setPays(p);setRegionKey(null);setAppellation(null);}}/>))}
           </ChipsScroll>
+
+          <Text style={s.label}>Région</Text>
+          {pays?(
+            <ChipsScroll>
+              <Chip label="Aucune" active={regionKey===null} onPress={()=>{setRegionKey(null);setAppellation(null);}}/>
+              {regionsList.map(r=>(<Chip key={r.key} label={r.label} active={regionKey===r.key} onPress={()=>{setRegionKey(r.key);setAppellation(null);}}/>))}
+            </ChipsScroll>
+          ):(
+            <Text style={s.aide}>Choisissez d'abord un pays.</Text>
+          )}
 
           <Text style={s.label}>Appellation</Text>
           {regionChoisie?(

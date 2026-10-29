@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Image, ScrollView, Alert, Modal,
+  StyleSheet, ActivityIndicator, Image, ScrollView, Alert, Modal, useWindowDimensions,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../lib/AppContext';
@@ -21,21 +21,21 @@ function parsePaliers(v){
   if(Array.isArray(v))return v;
   try{return JSON.parse(v);}catch(e){return[];}
 }
+// Prix pro = premier palier autorisé (paliers filtrés dans charger() selon paliers_autorises_cache)
 function prixPro(v){
   const paliers=parsePaliers(v.brl_paliers);
-  return(paliers.length>0)?paliers[0].prix_ttc:v.brl_public_ttc;
+  return(paliers.length>0)?paliers[0].prix_ttc:null;
 }
+// Prix affiché seulement si au moins un palier est autorisé
 function margeOk(v){
-  const pro=parseFloat(prixPro(v))||0;
-  const pub=parseFloat(v.brl_public_ttc)||0;
-  if(!pro||!pub)return false;
-  return((pub-pro)/pub*100)>=30;
+  return parseFloat(prixPro(v))>0;
 }
 
 function Dot({c}){return <View style={{width:10,height:10,borderRadius:5,backgroundColor:DOT_CLR[c]||'#999'}}/>;}
 
 export default function CatalogueScreen(){
   const {t,lang,addLigneDevis}=useApp();
+  const {width}=useWindowDimensions();
   const [vins,setVins]=useState([]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState('');
@@ -62,17 +62,17 @@ export default function CatalogueScreen(){
     try{
       const{data,error}=await supabase.from('Catalogue App')
         .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise')
-        .order('producteur').limit(500);
+        .order('producteur').limit(1000);
       if(error)Alert.alert('Erreur',JSON.stringify(error));
       else if(data){
         // Filtrer uniquement les vins avec marge nette > 30% (paliers_autorises_cache)
-        const{data:autorises}=await supabase.from('paliers_autorises_cache').select('produit_id,brl_paliers');
+        const{data:autorises}=await supabase.from('paliers_autorises_cache').select('produit_id,qtes');
         const autorisesMap={};
-        if(autorises)autorises.forEach(a=>{autorisesMap[a.produit_id]=a.brl_paliers;});
-        const filtered=data.map(v=>({
-          ...v,
-          brl_paliers:autorisesMap[v.produit_id]||v.brl_paliers||[]
-        })).filter(v=>autorisesMap[v.produit_id]||(parseFloat(v.brl_public_ttc)>0));
+        if(autorises)autorises.forEach(a=>{autorisesMap[a.produit_id]=a.qtes||[];});
+        const filtered=data.map(v=>{
+          const qtesOk=autorisesMap[v.produit_id]||[];
+          return {...v, brl_paliers: parsePaliers(v.brl_paliers).filter(p=>qtesOk.includes(p.qte))};
+        }).filter(v=>autorisesMap[v.produit_id]||(parseFloat(v.brl_public_ttc)>0));
         setVins(filtered);
         const ids=filtered.map(v=>v.produit_id);
         const{data:cp}=await supabase.from('Catalogue Cepages').select('*').in('produit_id',ids);
@@ -447,9 +447,9 @@ export default function CatalogueScreen(){
               contentContainerStyle={{paddingBottom:100}}/>
           :<FlatList key="grille" data={liste} keyExtractor={(item)=>item.produit_id}
               renderItem={({item,index})=><VinCard item={item} idx={index}/>}
-              numColumns={2}
-              columnWrapperStyle={{gap:12,paddingHorizontal:12}}
-              contentContainerStyle={{paddingVertical:12,gap:12,paddingBottom:100}}/>
+              numColumns={width<700?1:2}
+              columnWrapperStyle={width<700?undefined:{gap:12,paddingHorizontal:12}}
+              contentContainerStyle={{paddingVertical:12,gap:12,paddingBottom:100,paddingHorizontal:width<700?12:0}}/>
       }
       <FiltrePanel/>
       <FicheProduit/>

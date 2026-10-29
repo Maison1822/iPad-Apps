@@ -50,7 +50,7 @@ export default function SimulateurScreen(){
   const [type,setType]=useState('Tranquille');
   const [alcool,setAlcool]=useState('13');
   const [ncmId,setNcmId]=useState(null);
-  const [region,setRegion]=useState(null);
+  const [regionKey,setRegionKey]=useState(null);
   const [appellation,setAppellation]=useState(null);
   const [etat,setEtat]=useState('SC');
   const [mmin,setMmin]=useState('30');
@@ -70,15 +70,27 @@ export default function SimulateurScreen(){
     });
   },[]);
 
-  const regions=useMemo(()=>{
-    const set=new Set(refs.appellations.map(a=>a.region).filter(Boolean));
-    return [...set].sort();
+  // Cascade : Région (pays · région) → Appellations de cette seule région
+  const regionsList=useMemo(()=>{
+    const m=new Map();
+    refs.appellations.forEach(a=>{
+      if(!a.region)return;
+      const k=`${a.pays}|${a.region}`;
+      if(!m.has(k))m.set(k,{key:k,region:a.region,pays:a.pays||''});
+    });
+    return [...m.values()].sort((x,y)=>x.pays.localeCompare(y.pays)||x.region.localeCompare(y.region));
   },[refs]);
 
+  const regionChoisie=regionsList.find(r=>r.key===regionKey)||null;
+  const region=regionChoisie?regionChoisie.region:null;
+
   const appellations=useMemo(()=>{
-    const liste=refs.appellations.filter(a=>!region||a.region===region).map(a=>a.appellation).filter(Boolean);
+    if(!regionChoisie)return [];
+    const liste=refs.appellations
+      .filter(a=>a.region===regionChoisie.region&&(a.pays||'')===regionChoisie.pays)
+      .map(a=>a.appellation).filter(Boolean);
     return [...new Set(liste)].sort();
-  },[refs,region]);
+  },[refs,regionChoisie]);
 
   const ncmChoisi=refs.ncm.find(n=>n.id===ncmId);
 
@@ -165,15 +177,19 @@ export default function SimulateurScreen(){
 
           <Text style={s.label}>Région</Text>
           <ChipsScroll>
-            <Chip label="Toutes" active={region===null} onPress={()=>{setRegion(null);setAppellation(null);}}/>
-            {regions.map(r=>(<Chip key={r} label={r} active={region===r} onPress={()=>{setRegion(r);setAppellation(null);}}/>))}
+            <Chip label="Aucune" active={regionKey===null} onPress={()=>{setRegionKey(null);setAppellation(null);}}/>
+            {regionsList.map(r=>(<Chip key={r.key} label={`${r.region} · ${r.pays}`} active={regionKey===r.key} onPress={()=>{setRegionKey(r.key);setAppellation(null);}}/>))}
           </ChipsScroll>
 
           <Text style={s.label}>Appellation</Text>
-          <ChipsScroll>
-            <Chip label="Toutes" active={appellation===null} onPress={()=>setAppellation(null)}/>
-            {appellations.map(a=>(<Chip key={a} label={a} active={appellation===a} onPress={()=>setAppellation(a)}/>))}
-          </ChipsScroll>
+          {regionChoisie?(
+            <ChipsScroll>
+              <Chip label="Toutes" active={appellation===null} onPress={()=>setAppellation(null)}/>
+              {appellations.map(a=>(<Chip key={a} label={a} active={appellation===a} onPress={()=>setAppellation(a)}/>))}
+            </ChipsScroll>
+          ):(
+            <Text style={s.aide}>Choisissez d'abord une région.</Text>
+          )}
 
           <Text style={s.label}>Format de bouteille</Text>
           <View style={s.ligne}>

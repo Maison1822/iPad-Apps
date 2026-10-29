@@ -23,7 +23,11 @@
     },
     "plugins": [
       "expo-camera",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-font",
+      "expo-mail-composer",
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "updates": {
       "url": "https://u.expo.dev/fc891ee7-7431-4012-ba0b-784d55cfe40b",

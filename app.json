@@ -3,7 +3,7 @@
     "name": "MAISON 1822",
     "slug": "maison1822",
     "version": "2.0.0",
-    "orientation": "landscape",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "extra": {

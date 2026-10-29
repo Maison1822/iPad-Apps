@@ -15,6 +15,8 @@ export default function ProspectsScreen(){
   const [filtreCategorie,setFiltreCategorie]=useState('Tous');
   const [selected,setSelected]=useState(null);
   const [toggling,setToggling]=useState(null);
+  const [tri,setTri]=useState('nom');
+  const [triSens,setTriSens]=useState('asc');
 
   useEffect(()=>{charger();},[]);
 
@@ -46,7 +48,20 @@ export default function ProspectsScreen(){
     return cats;
   },[prospects]);
 
-  const liste=useMemo(()=>prospects.filter(p=>{
+  // Tris disponibles (un clic : trier ; second clic sur le même : inverser)
+  const TRIS=[
+    {id:'nom',label:'Nom',get:p=>`${p.nom_contact||''} ${p.prenom_contact||''}`.trim()},
+    {id:'etab',label:'Établissement',get:p=>p.nom_etablissement},
+    {id:'ville',label:'Ville',get:p=>p.ville},
+    {id:'statut',label:'Statut',get:p=>p.statut},
+    {id:'relance',label:'Relance',get:p=>p.date_prochaine_relance},
+    {id:'contact',label:'Dernier contact',get:p=>p.date_dernier_contact},
+    {id:'favori',label:'Favori',get:p=>p.favori?1:0},
+  ];
+
+  const liste=useMemo(()=>{
+    const cle=TRIS.find(x=>x.id===tri).get;
+    const filtrees=prospects.filter(p=>{
     if(filtreFavori&&!p.favori)return false;
     const q=search.toLowerCase();
     if(search&&![p.nom_contact||'',p.prenom_contact||'',p.nom_etablissement||'',p.ville||''].some(x=>x.toLowerCase().includes(q)))return false;
@@ -54,7 +69,17 @@ export default function ProspectsScreen(){
     if(filtreStatut!=='Tous'&&p.statut!==filtreStatut)return false;
     if(filtreCategorie!=='Tous'&&p.categorie!==filtreCategorie)return false;
     return true;
-  }),[prospects,search,filtreFavori,filtrePays,filtreStatut,filtreCategorie]);
+    }).sort((a,b)=>{
+      const va=cle(a), vb=cle(b);
+      const vide=v=>v==null||v==='';
+      if(vide(va)&&vide(vb))return 0;
+      if(vide(va))return 1;
+      if(vide(vb))return -1;
+      const r=typeof va==='number'?va-vb:String(va).localeCompare(String(vb),'fr',{sensitivity:'base'});
+      return triSens==='asc'?r:-r;
+    });
+    return filtrees;
+  },[prospects,search,filtreFavori,filtrePays,filtreStatut,filtreCategorie,tri,triSens]);
 
   function StatutBadge({statut}){
     return(
@@ -198,6 +223,17 @@ export default function ProspectsScreen(){
         </View>
       )}
 
+
+      {/* Tris */}
+      <View style={{paddingHorizontal:16,paddingBottom:8,flexDirection:'row',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        <Text style={{color:MUTED,fontSize:12}}>Trier :</Text>
+        {TRIS.map(x=>(
+          <TouchableOpacity key={x.id} style={[s.chip,tri===x.id&&s.chipActive]}
+            onPress={()=>{ if(tri===x.id){setTriSens(v=>v==='asc'?'desc':'asc');} else {setTri(x.id);setTriSens('asc');} }}>
+            <Text style={[s.chipTxt,tri===x.id&&s.chipTxtActive]}>{x.label}{tri===x.id?(triSens==='asc'?' ↑':' ↓'):''}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <Text style={{paddingHorizontal:20,paddingBottom:4,fontSize:11,color:MUTED}}>{liste.length} prospect{liste.length>1?'s':''}</Text>
 

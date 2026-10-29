@@ -33,7 +33,7 @@ function margeOk(v){
 
 function Dot({c}){return <View style={{width:10,height:10,borderRadius:5,backgroundColor:DOT_CLR[c]||'#999'}}/>;}
 
-export default function CatalogueScreen(){
+export default function CatalogueScreen({navigation}){
   const {t,lang,addLigneDevis}=useApp();
   const {width}=useWindowDimensions();
   const [vins,setVins]=useState([]);
@@ -403,6 +403,9 @@ export default function CatalogueScreen(){
             <Text style={{color:WHITE,fontSize:10,opacity:0.4}}>{Updates.updateId?Updates.updateId.substring(0,8):'v34'}</Text>
           </View>
         </View>
+        <TouchableOpacity style={s.toggleBtn} onPress={()=>navigation.navigate('Simulateur')}>
+          <Text style={s.toggleTxt}>🧮</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={s.toggleBtn} onPress={()=>setVue(v=>v==='liste'?'bouteilles':'liste')}>
           <Text style={s.toggleTxt}>{vue==='liste'?'⊞':'☰'}</Text>
         </TouchableOpacity>

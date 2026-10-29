@@ -445,7 +445,7 @@ export default function CatalogueScreen(){
               renderItem={({item,index})=><VinRow item={item} idx={index}/>}
               ItemSeparatorComponent={()=><View style={{height:1,backgroundColor:BORDER}}/>}
               contentContainerStyle={{paddingBottom:100}}/>
-          :<FlatList key="grille" data={liste} keyExtractor={(item)=>item.produit_id}
+          :<FlatList key={`grille-${width<700?1:2}`} data={liste} keyExtractor={(item)=>item.produit_id}
               renderItem={({item,index})=><VinCard item={item} idx={index}/>}
               numColumns={width<700?1:2}
               columnWrapperStyle={width<700?undefined:{gap:12,paddingHorizontal:12}}

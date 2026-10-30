@@ -380,13 +380,13 @@ export default function CatalogueScreen({navigation}){
           <View style={{paddingHorizontal:20,paddingVertical:10,borderBottomWidth:1,borderBottomColor:BORDER}}>
             {margeOk(item)?<Text style={{color:GOLD,fontSize:22,fontWeight:'700'}}>R$ {fmt(item.brl_public_ttc)} <Text style={{fontSize:12,fontWeight:'400',color:MUTED}}>TTC public</Text></Text>:<Text style={{color:MUTED,fontSize:16,fontStyle:'italic'}}>Prix sur demande</Text>}
           </View>
-          <View style={{flexDirection:'row',flexWrap:'wrap',paddingHorizontal:8,borderBottomWidth:1,borderBottomColor:BORDER}}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0,borderBottomWidth:1,borderBottomColor:BORDER}} contentContainerStyle={{paddingHorizontal:8}}>
             {ONGLETS.map(o=>(
-              <TouchableOpacity key={o.id} style={[{paddingHorizontal:10,paddingVertical:10,borderBottomWidth:2,borderBottomColor:'transparent'},onglet===o.id&&{borderBottomColor:GOLD}]} onPress={()=>setOnglet(o.id)}>
+              <TouchableOpacity key={o.id} style={[{paddingHorizontal:14,paddingVertical:12,borderBottomWidth:2,borderBottomColor:'transparent'},onglet===o.id&&{borderBottomColor:GOLD}]} onPress={()=>setOnglet(o.id)}>
                 <Text style={{color:onglet===o.id?GOLD:MUTED,fontSize:13,fontWeight:onglet===o.id?'700':'400'}}>{o.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
           <View style={{flex:1}}><OngletContent/></View>
         </View>
       </View>

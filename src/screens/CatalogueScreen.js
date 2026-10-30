@@ -111,7 +111,7 @@ export default function CatalogueScreen({navigation}){
     return true;
   }).sort((a,b)=>{
     if(!triPrix)return 0;
-    const pa=margeOk(a)?(prixPro(a)||0):triPrix==='asc'?9999999:0, pb=margeOk(b)?(prixPro(b)||0):triPrix==='asc'?9999999:0;
+    const pa=margeOk(a)?(a.brl_public_ttc||0):triPrix==='asc'?9999999:0, pb=margeOk(b)?(b.brl_public_ttc||0):triPrix==='asc'?9999999:0;
     return triPrix==='asc'?pa-pb:pb-pa;
   }),[vins,search,selCouleur,selRegion,selApp,selCol,selCertif,selCoupCoeur,selClub1822,triPrix]);
 
@@ -186,7 +186,7 @@ export default function CatalogueScreen({navigation}){
           <Text style={s.rowApp} numberOfLines={1}>{item.appellation} · {item.millesime||'—'}{item.contenance_ml?` · ${item.contenance_ml} mL`:''}</Text>
         </View>
         <View style={s.rowRight}>
-          {margeOk(item)?<Text style={s.prix}>R$ {fmt(prixPro(item))}</Text>:<Text style={[s.prix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
+          {margeOk(item)?<Text style={s.prix}>R$ {fmt(item.brl_public_ttc)}</Text>:<Text style={[s.prix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
           <TouchableOpacity style={[s.btnAdd,confirme&&{backgroundColor:SUCCESS}]} onPress={()=>handleAjouter(item)}>
             <Text style={s.btnAddTxt}>{confirme?'✓':'+'}</Text>
           </TouchableOpacity>
@@ -209,7 +209,7 @@ export default function CatalogueScreen({navigation}){
           <Text style={s.cardCuvee} numberOfLines={1}>{nom}</Text>
           <Text style={s.cardApp} numberOfLines={1}>{item.appellation}</Text>
           <Text style={{color:MUTED,fontSize:11,marginBottom:8}}>{item.millesime||'—'}{item.contenance_ml?` · ${item.contenance_ml} mL`:''}</Text>
-          {margeOk(item)?<Text style={s.cardPrix}>R$ {fmt(prixPro(item))}</Text>:<Text style={[s.cardPrix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
+          {margeOk(item)?<Text style={s.cardPrix}>R$ {fmt(item.brl_public_ttc)}</Text>:<Text style={[s.cardPrix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
           <TouchableOpacity style={[s.cardBtn,confirme&&{backgroundColor:SUCCESS}]} onPress={()=>handleAjouter(item)}>
             <Text style={s.cardBtnTxt}>{confirme?'✓ Ajouté':t.ajouter_devis}</Text>
           </TouchableOpacity>
@@ -378,15 +378,15 @@ export default function CatalogueScreen({navigation}){
             </TouchableOpacity>
           </View>
           <View style={{paddingHorizontal:20,paddingVertical:10,borderBottomWidth:1,borderBottomColor:BORDER}}>
-            {margeOk(item)?<Text style={{color:GOLD,fontSize:22,fontWeight:'700'}}>R$ {fmt(prixPro(item))} <Text style={{fontSize:12,fontWeight:'400',color:MUTED}}>TTC pro</Text></Text>:<Text style={{color:MUTED,fontSize:16,fontStyle:'italic'}}>Prix sur demande</Text>}
+            {margeOk(item)?<Text style={{color:GOLD,fontSize:22,fontWeight:'700'}}>R$ {fmt(item.brl_public_ttc)} <Text style={{fontSize:12,fontWeight:'400',color:MUTED}}>TTC public</Text></Text>:<Text style={{color:MUTED,fontSize:16,fontStyle:'italic'}}>Prix sur demande</Text>}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{maxHeight:44,borderBottomWidth:1,borderBottomColor:BORDER}} contentContainerStyle={{paddingHorizontal:16}}>
+          <View style={{flexDirection:'row',flexWrap:'wrap',paddingHorizontal:8,borderBottomWidth:1,borderBottomColor:BORDER}}>
             {ONGLETS.map(o=>(
-              <TouchableOpacity key={o.id} style={[{paddingHorizontal:16,paddingVertical:12,borderBottomWidth:2,borderBottomColor:'transparent'},onglet===o.id&&{borderBottomColor:GOLD}]} onPress={()=>setOnglet(o.id)}>
+              <TouchableOpacity key={o.id} style={[{paddingHorizontal:10,paddingVertical:10,borderBottomWidth:2,borderBottomColor:'transparent'},onglet===o.id&&{borderBottomColor:GOLD}]} onPress={()=>setOnglet(o.id)}>
                 <Text style={{color:onglet===o.id?GOLD:MUTED,fontSize:13,fontWeight:onglet===o.id?'700':'400'}}>{o.label}</Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
           <View style={{flex:1}}><OngletContent/></View>
         </View>
       </View>

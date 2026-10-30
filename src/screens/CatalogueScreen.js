@@ -30,6 +30,7 @@ function prixPro(v){
 }
 // Prix affiché seulement si au moins un palier est autorisé
 function margeOk(v){
+  if(v._ok!==undefined)return v._ok; // Catalogue BR : prix EUR disponible
   return parseFloat(prixPro(v))>0;
 }
 
@@ -41,7 +42,10 @@ export default function CatalogueScreen({navigation}){
   const [vinsTous,setVins]=useState([]);
   const [groupe,setGroupe]=useState('FR');
   // Vins du catalogue affiché (FR ou BR) ; toutes les listes et filtres travaillent sur ce groupe
-  const vins=useMemo(()=>vinsTous.filter(v=>AMERIQUE_SUD.includes(v.pays)===(groupe==='BR')),[vinsTous,groupe]);
+  // Catalogue FR : prix en R$ (vente au Brésil). Catalogue BR : prix en € (vente en France/Europe).
+  const vins=useMemo(()=>vinsTous.filter(v=>AMERIQUE_SUD.includes(v.pays)===(groupe==='BR')).map(v=>groupe==='BR'
+    ?{...v,_px:v.eur_public_ttc,_ht:v.eur_public_ht,_dev:'€',_ok:parseFloat(v.eur_public_ttc)>0,brl_paliers:[]}
+    :{...v,_px:v.brl_public_ttc,_ht:v.brl_public_ht,_dev:'R$'}),[vinsTous,groupe]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState('');
   const [vue,setVue]=useState('liste');
@@ -125,7 +129,7 @@ export default function CatalogueScreen({navigation}){
     return true;
   }).sort((a,b)=>{
     if(!triPrix)return 0;
-    const pa=margeOk(a)?(a.brl_public_ttc||0):triPrix==='asc'?9999999:0, pb=margeOk(b)?(b.brl_public_ttc||0):triPrix==='asc'?9999999:0;
+    const pa=margeOk(a)?(a._px||0):triPrix==='asc'?9999999:0, pb=margeOk(b)?(b._px||0):triPrix==='asc'?9999999:0;
     return triPrix==='asc'?pa-pb:pb-pa;
   }),[vins,search,selPays,selCouleur,selRegion,selApp,selCol,selCertif,selCoupCoeur,selClub1822,triPrix]);
 
@@ -202,7 +206,7 @@ export default function CatalogueScreen({navigation}){
           <Text style={s.rowApp} numberOfLines={1}>{item.appellation} · {item.millesime||'—'}{item.contenance_ml?` · ${item.contenance_ml} mL`:''}</Text>
         </View>
         <View style={s.rowRight}>
-          {margeOk(item)?<Text style={s.prix}>R$ {fmt(item.brl_public_ttc)}</Text>:<Text style={[s.prix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
+          {margeOk(item)?<Text style={s.prix}>{item._dev} {fmt(item._px)}</Text>:<Text style={[s.prix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
           <TouchableOpacity style={[s.btnAdd,confirme&&{backgroundColor:SUCCESS}]} onPress={()=>handleAjouter(item)}>
             <Text style={s.btnAddTxt}>{confirme?'✓':'+'}</Text>
           </TouchableOpacity>
@@ -225,7 +229,7 @@ export default function CatalogueScreen({navigation}){
           <Text style={s.cardCuvee} numberOfLines={1}>{nom}</Text>
           <Text style={s.cardApp} numberOfLines={1}>{item.appellation}</Text>
           <Text style={{color:MUTED,fontSize:11,marginBottom:8}}>{item.millesime||'—'}{item.contenance_ml?` · ${item.contenance_ml} mL`:''}</Text>
-          {margeOk(item)?<Text style={s.cardPrix}>R$ {fmt(item.brl_public_ttc)}</Text>:<Text style={[s.cardPrix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
+          {margeOk(item)?<Text style={s.cardPrix}>{item._dev} {fmt(item._px)}</Text>:<Text style={[s.cardPrix,{color:MUTED,fontSize:12}]}>Sur demande</Text>}
           <TouchableOpacity style={[s.cardBtn,confirme&&{backgroundColor:SUCCESS}]} onPress={()=>handleAjouter(item)}>
             <Text style={s.cardBtnTxt}>{confirme?'✓ Ajouté':t.ajouter_devis}</Text>
           </TouchableOpacity>
@@ -337,10 +341,10 @@ export default function CatalogueScreen({navigation}){
         return(<ScrollView contentContainerStyle={{padding:20}}>
           <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginBottom:16,borderWidth:1,borderColor:BORDER}}>
             <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Prix public TTC</Text>
-            <Text style={{color:WHITE,fontSize:22,fontWeight:'300',textDecorationLine:'line-through'}}>R$ {fmt(item.brl_public_ttc)}</Text>
-            <Text style={{color:MUTED,fontSize:12,marginTop:2}}>HT : R$ {fmt(item.brl_public_ht)}</Text>
+            <Text style={{color:WHITE,fontSize:22,fontWeight:'300',textDecorationLine:'line-through'}}>{item._dev} {fmt(item._px)}</Text>
+            <Text style={{color:MUTED,fontSize:12,marginTop:2}}>HT : {item._dev} {fmt(item._ht)}</Text>
           </View>
-          {paliers.length>0&&(
+          {paliers.length>0&&item._dev==='R$'&&(
             <View style={{backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
               <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Tarifs professionnels TTC</Text>
               <View style={{flexDirection:'row',marginBottom:8}}>
@@ -396,7 +400,7 @@ export default function CatalogueScreen({navigation}){
             </TouchableOpacity>
           </View>
           <View style={{paddingHorizontal:20,paddingVertical:10,borderBottomWidth:1,borderBottomColor:BORDER}}>
-            {margeOk(item)?<Text style={{color:GOLD,fontSize:22,fontWeight:'700'}}>R$ {fmt(item.brl_public_ttc)} <Text style={{fontSize:12,fontWeight:'400',color:MUTED}}>TTC public</Text></Text>:<Text style={{color:MUTED,fontSize:16,fontStyle:'italic'}}>Prix sur demande</Text>}
+            {margeOk(item)?<Text style={{color:GOLD,fontSize:22,fontWeight:'700'}}>{item._dev} {fmt(item._px)} <Text style={{fontSize:12,fontWeight:'400',color:MUTED}}>TTC public</Text></Text>:<Text style={{color:MUTED,fontSize:16,fontStyle:'italic'}}>Prix sur demande</Text>}
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} onTouchStart={()=>{ongletTouch.current=true;}} style={{flexGrow:0,borderBottomWidth:1,borderBottomColor:BORDER}} contentContainerStyle={{paddingHorizontal:8}}>
             {ONGLETS.map(o=>(

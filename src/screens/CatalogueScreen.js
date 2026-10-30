@@ -9,6 +9,8 @@ import * as Updates from 'expo-updates';
 
 const BG='#1C1C1E',CARD='#2C2C2E',NAVY='#0F1E3C',GOLD='#C8A45A',WHITE='#FFFFFF',MUTED='#8E8E93',BORDER='#3A3A3C',SUCCESS='#2D7A4F';
 const COULEURS=['Tous','Rouge','Blanc','Rosé','Ambré'];
+// Pays du catalogue BR (Amérique du Sud) ; tout le reste part dans le catalogue FR
+const AMERIQUE_SUD=['Brésil','Argentine','Chili'];
 const DOT_CLR={Rouge:'#8B1A2E',Blanc:'#C9B458','Rosé':'#D98A9A','Ambré':'#C8821A'};
 const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appellation',label:'Appellation'},{id:'couleur',label:'Couleur'},{id:'collection',label:'Collection'},{id:'certif',label:'Certification'},{id:'coup_coeur',label:'Coup de Cœur'},{id:'club1822',label:'Club 1822'}];
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
@@ -36,7 +38,10 @@ function Dot({c}){return <View style={{width:10,height:10,borderRadius:5,backgro
 export default function CatalogueScreen({navigation}){
   const {t,lang,addLigneDevis}=useApp();
   const {width}=useWindowDimensions();
-  const [vins,setVins]=useState([]);
+  const [vinsTous,setVins]=useState([]);
+  const [groupe,setGroupe]=useState('FR');
+  // Vins du catalogue affiché (FR ou BR) ; toutes les listes et filtres travaillent sur ce groupe
+  const vins=useMemo(()=>vinsTous.filter(v=>AMERIQUE_SUD.includes(v.pays)===(groupe==='BR')),[vinsTous,groupe]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState('');
   const [vue,setVue]=useState('liste');
@@ -422,6 +427,14 @@ export default function CatalogueScreen({navigation}){
       </View>
       <View style={{paddingHorizontal:16,paddingVertical:8}}>
         <TextInput style={s.searchInput} placeholder={t.rechercher} placeholderTextColor={MUTED} value={search} onChangeText={setSearch}/>
+      </View>
+      <View style={{flexDirection:'row',gap:8,paddingHorizontal:16,paddingTop:10}}>
+        {[{k:'FR',l:'Catalogue FR'},{k:'BR',l:'Catalogue BR'}].map(g=>(
+          <TouchableOpacity key={g.k} onPress={()=>{setGroupe(g.k);setSelPays('Tous');setSelRegion('Toutes');setSelApp('Toutes');}}
+            style={{flex:1,paddingVertical:8,borderRadius:8,borderWidth:1,borderColor:groupe===g.k?GOLD:BORDER,backgroundColor:groupe===g.k?GOLD:CARD,alignItems:'center'}}>
+            <Text style={{color:groupe===g.k?NAVY:WHITE,fontWeight:'700',fontSize:13}}>{g.l}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
       <View style={{flexDirection:'row',alignItems:'center'}}>
         <View style={{flex:1,height:50,justifyContent:'center'}}>

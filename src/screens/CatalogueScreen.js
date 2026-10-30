@@ -60,6 +60,7 @@ export default function CatalogueScreen({navigation}){
   const [triPrix,setTriPrix]=useState(null); // null | 'asc' | 'desc'
   const [cepagesMap,setCepagesMap]=useState({});
   const touchStartX=useRef(0);
+  const ongletTouch=useRef(false);
 
   useEffect(()=>{charger();},[]);
 
@@ -364,6 +365,8 @@ export default function CatalogueScreen({navigation}){
       <View style={{position:'absolute',top:0,left:0,right:0,bottom:0,zIndex:999,flexDirection:'row',backgroundColor:BG}}
         onTouchStart={e=>{touchStartX.current=e.nativeEvent.pageX;}}
         onTouchEnd={e=>{
+          // Glissement sur la barre d'onglets : on fait défiler les onglets, pas les vins
+          if(ongletTouch.current){ongletTouch.current=false;return;}
           const dx=e.nativeEvent.pageX-touchStartX.current;
           if(dx<-60&&detailIdx<liste.length-1)setDetailIdx(i=>i+1);
           else if(dx>60&&detailIdx>0)setDetailIdx(i=>i-1);
@@ -395,7 +398,7 @@ export default function CatalogueScreen({navigation}){
           <View style={{paddingHorizontal:20,paddingVertical:10,borderBottomWidth:1,borderBottomColor:BORDER}}>
             {margeOk(item)?<Text style={{color:GOLD,fontSize:22,fontWeight:'700'}}>R$ {fmt(item.brl_public_ttc)} <Text style={{fontSize:12,fontWeight:'400',color:MUTED}}>TTC public</Text></Text>:<Text style={{color:MUTED,fontSize:16,fontStyle:'italic'}}>Prix sur demande</Text>}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0,borderBottomWidth:1,borderBottomColor:BORDER}} contentContainerStyle={{paddingHorizontal:8}}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} onTouchStart={()=>{ongletTouch.current=true;}} style={{flexGrow:0,borderBottomWidth:1,borderBottomColor:BORDER}} contentContainerStyle={{paddingHorizontal:8}}>
             {ONGLETS.map(o=>(
               <TouchableOpacity key={o.id} style={[{paddingHorizontal:14,paddingVertical:12,borderBottomWidth:2,borderBottomColor:'transparent'},onglet===o.id&&{borderBottomColor:GOLD}]} onPress={()=>setOnglet(o.id)}>
                 <Text style={{color:onglet===o.id?GOLD:MUTED,fontSize:13,fontWeight:onglet===o.id?'700':'400'}}>{o.label}</Text>

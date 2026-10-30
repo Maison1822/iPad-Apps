@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 const BG='#1C1C1E',CARD='#2C2C2E',GOLD='#C8A45A',WHITE='#FFFFFF',MUTED='#8E8E93',BORDER='#3A3A3C',NAVY='#0F1E3C',ERROR='#E57373';
@@ -16,6 +16,11 @@ function parseNum(v){
   const n=parseFloat(String(v).replace(',','.'));
   return isNaN(n)?null:n;
 }
+// Libellé lisible : "CÔTES-DU-RHÔNE" → "Côtes-du-rhône"
+function titre(v){
+  const t=String(v).trim().toLowerCase();
+  return t.charAt(0).toUpperCase()+t.slice(1);
+}
 
 function Chip({label,active,onPress}){
   return(
@@ -30,6 +35,38 @@ function ChipsScroll({children}){
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>
       {children}
     </ScrollView>
+  );
+}
+
+// Menu déroulant : bouton + liste dans une fenêtre modale
+function Dropdown({label,valeur,options,onChange,placeholder,disabled}){
+  const [ouvert,setOuvert]=useState(false);
+  const choisi=options.find(o=>o.key===valeur);
+  return(
+    <>
+      <Text style={s.label}>{label}</Text>
+      <TouchableOpacity disabled={disabled} onPress={()=>setOuvert(true)} style={[s.select,disabled&&{opacity:0.4}]}>
+        <Text style={[s.selectTxt,!choisi&&{color:MUTED}]} numberOfLines={1}>
+          {choisi?choisi.label:(placeholder||'Choisir')}
+        </Text>
+        <Text style={s.selectFleche}>▾</Text>
+      </TouchableOpacity>
+      <Modal visible={ouvert} transparent animationType="fade" onRequestClose={()=>setOuvert(false)}>
+        <TouchableOpacity style={s.modalFond} activeOpacity={1} onPress={()=>setOuvert(false)}>
+          <View style={s.modalBoite}>
+            <Text style={s.modalTitre}>{label}</Text>
+            <ScrollView>
+              {options.map(o=>(
+                <TouchableOpacity key={String(o.key)} onPress={()=>{onChange(o.key);setOuvert(false);}}
+                  style={[s.option,o.key===valeur&&s.optionActive]}>
+                  <Text style={[s.optionTxt,o.key===valeur&&s.optionTxtActive]}>{o.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
@@ -50,51 +87,66 @@ export default function SimulateurScreen(){
   const [type,setType]=useState('Tranquille');
   const [alcool,setAlcool]=useState('13');
   const [ncmId,setNcmId]=useState(null);
-  const [pays,setPays]=useState(null);
+  const [paysKey,setPaysKey]=useState(null);
   const [regionKey,setRegionKey]=useState(null);
   const [appellation,setAppellation]=useState(null);
   const [etat,setEtat]=useState('SC');
   const [mmin,setMmin]=useState('30');
   const [mmax,setMmax]=useState('60');
 
-  const [refs,setRefs]=useState({ncm:[],appellations:[]});
+  const [catalogue,setCatalogue]=useState([]);
+  const [ncmList,setNcmList]=useState([]);
   const [res,setRes]=useState(null);
   const [loading,setLoading]=useState(false);
   const [erreur,setErreur]=useState('');
   const [similaires,setSimilaires]=useState([]);
   const [loadingSim,setLoadingSim]=useState(false);
 
-  // Référentiels NCM et appellations (lecture via fonction sécurisée)
+  // Pays, régions et appellations : uniquement ceux des vins du catalogue
   useEffect(()=>{
+    supabase.from('Catalogue App').select('pays,region,appellation').then(({data,error})=>{
+      if(!error&&data)setCatalogue(data);
+    });
     supabase.rpc('simulateur_references').then(({data,error})=>{
-      if(!error&&data)setRefs({ncm:data.ncm||[],appellations:data.appellations||[]});
+      if(!error&&data)setNcmList(data.ncm||[]);
     });
   },[]);
 
-  // Cascade : Pays → Région → Appellation
-  const paysList=useMemo(()=>{
-    const set=new Set(refs.appellations.map(a=>a.pays).filter(Boolean));
-    return [...set].sort((x,y)=>x.localeCompare(y,'fr'));
-  },[refs]);
+  // Cascade : Pays → Région → Appellation (valeurs normalisées en majuscules pour fusionner les doublons)
+  const paysOptions=useMemo(()=>{
+    const m=new Map();
+    catalogue.forEach(r=>{
+      if(!r.pays)return;
+      const k=r.pays.trim().toUpperCase();
+      if(!m.has(k))m.set(k,{key:k,label:titre(r.pays)});
+    });
+    return [...m.values()].sort((a,b)=>a.label.localeCompare(b.label,'fr'));
+  },[catalogue]);
 
-  // Régions du pays choisi, casse unifiée pour fusionner les doublons (ALSACE / Alsace)
-  const regionsList=useMemo(()=>{
-    if(!pays)return [];
-    const set=new Set(refs.appellations.filter(a=>a.pays===pays&&a.region).map(a=>a.region.trim().toUpperCase()));
-    return [...set].sort((x,y)=>x.localeCompare(y,'fr')).map(r=>({key:r,label:r}));
-  },[refs,pays]);
+  const regionOptions=useMemo(()=>{
+    if(!paysKey)return [];
+    const m=new Map();
+    catalogue.forEach(r=>{
+      if(!r.region||!r.pays||r.pays.trim().toUpperCase()!==paysKey)return;
+      const k=r.region.trim().toUpperCase();
+      if(!m.has(k))m.set(k,{key:k,label:titre(r.region)});
+    });
+    return [...m.values()].sort((a,b)=>a.label.localeCompare(b.label,'fr'));
+  },[catalogue,paysKey]);
 
-  const regionChoisie=regionsList.find(r=>r.key===regionKey)||null;
+  const appellationOptions=useMemo(()=>{
+    if(!paysKey||!regionKey)return [];
+    const m=new Map();
+    catalogue.forEach(r=>{
+      if(!r.appellation||!r.pays||!r.region)return;
+      if(r.pays.trim().toUpperCase()!==paysKey||r.region.trim().toUpperCase()!==regionKey)return;
+      const k=r.appellation.trim();
+      if(!m.has(k))m.set(k,{key:k,label:k});
+    });
+    return [...m.values()].sort((a,b)=>a.label.localeCompare(b.label,'fr'));
+  },[catalogue,paysKey,regionKey]);
 
-  const appellations=useMemo(()=>{
-    if(!regionChoisie)return [];
-    const liste=refs.appellations
-      .filter(a=>a.pays===pays&&a.region&&a.region.trim().toUpperCase()===regionChoisie.key)
-      .map(a=>a.appellation).filter(Boolean);
-    return [...new Set(liste)].sort((x,y)=>x.localeCompare(y,'fr'));
-  },[refs,pays,regionChoisie]);
-
-  const ncmChoisi=refs.ncm.find(n=>n.id===ncmId);
+  const ncmChoisi=ncmList.find(n=>n.id===ncmId);
 
   // Simulation de prix
   useEffect(()=>{
@@ -170,47 +222,31 @@ export default function SimulateurScreen(){
           <Text style={s.label}>Taux d'alcool (%)</Text>
           <TextInput style={s.input} value={alcool} onChangeText={setAlcool} keyboardType="decimal-pad"/>
 
-          <Text style={s.label}>Code NCM</Text>
-          <ChipsScroll>
-            <Chip label="Par défaut" active={ncmId===null} onPress={()=>setNcmId(null)}/>
-            {refs.ncm.map(n=>(<Chip key={n.id} label={n.code} active={ncmId===n.id} onPress={()=>setNcmId(n.id)}/>))}
-          </ChipsScroll>
+          <Dropdown label="Code NCM" valeur={ncmId} placeholder="Par défaut"
+            options={[{key:null,label:'Par défaut'},...ncmList.map(n=>({key:n.id,label:n.code}))]}
+            onChange={setNcmId}/>
           {!!ncmChoisi&&<Text style={s.aide}>{ncmChoisi.description}</Text>}
 
-          <Text style={s.label}>Pays</Text>
-          <ChipsScroll>
-            {paysList.map(p=>(<Chip key={p} label={p} active={pays===p} onPress={()=>{setPays(p);setRegionKey(null);setAppellation(null);}}/>))}
-          </ChipsScroll>
+          <Dropdown label="Pays" valeur={paysKey} placeholder="Choisir un pays"
+            options={[{key:null,label:'Aucun'},...paysOptions]}
+            onChange={k=>{setPaysKey(k);setRegionKey(null);setAppellation(null);}}/>
 
-          <Text style={s.label}>Région</Text>
-          {pays?(
-            <ChipsScroll>
-              <Chip label="Aucune" active={regionKey===null} onPress={()=>{setRegionKey(null);setAppellation(null);}}/>
-              {regionsList.map(r=>(<Chip key={r.key} label={r.label} active={regionKey===r.key} onPress={()=>{setRegionKey(r.key);setAppellation(null);}}/>))}
-            </ChipsScroll>
-          ):(
-            <Text style={s.aide}>Choisissez d'abord un pays.</Text>
-          )}
+          <Dropdown label="Région" valeur={regionKey} placeholder="Choisir une région" disabled={!paysKey}
+            options={[{key:null,label:'Toutes'},...regionOptions]}
+            onChange={k=>{setRegionKey(k);setAppellation(null);}}/>
 
-          <Text style={s.label}>Appellation</Text>
-          {regionChoisie?(
-            <ChipsScroll>
-              <Chip label="Toutes" active={appellation===null} onPress={()=>setAppellation(null)}/>
-              {appellations.map(a=>(<Chip key={a} label={a} active={appellation===a} onPress={()=>setAppellation(a)}/>))}
-            </ChipsScroll>
-          ):(
-            <Text style={s.aide}>Choisissez d'abord une région.</Text>
-          )}
+          <Dropdown label="Appellation" valeur={appellation} placeholder="Choisir une appellation" disabled={!regionKey}
+            options={[{key:null,label:'Toutes'},...appellationOptions]}
+            onChange={setAppellation}/>
 
           <Text style={s.label}>Format de bouteille</Text>
           <View style={s.ligne}>
             {FORMATS.map(f=>(<Chip key={f} label={`${f} ml`} active={ml===f} onPress={()=>setMl(f)}/>))}
           </View>
 
-          <Text style={s.label}>État de destination</Text>
-          <ChipsScroll>
-            {ETATS.map(e=>(<Chip key={e} label={e} active={etat===e} onPress={()=>setEtat(e)}/>))}
-          </ChipsScroll>
+          <Dropdown label="État de destination" valeur={etat} placeholder="Choisir un état"
+            options={ETATS.map(e=>({key:e,label:e}))}
+            onChange={setEtat}/>
 
           <View style={{flexDirection:'row',gap:12,marginTop:12}}>
             <View style={{flex:1}}>
@@ -290,6 +326,16 @@ const s=StyleSheet.create({
   aide:{color:MUTED,fontSize:11,marginTop:6,lineHeight:16},
   titreSection:{color:GOLD,fontSize:14,fontWeight:'700',marginBottom:4},
   input:{backgroundColor:CARD,color:WHITE,borderWidth:1,borderColor:BORDER,borderRadius:8,paddingHorizontal:14,paddingVertical:12,fontSize:16},
+  select:{backgroundColor:CARD,borderWidth:1,borderColor:BORDER,borderRadius:8,paddingHorizontal:14,paddingVertical:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  selectTxt:{color:WHITE,fontSize:16,flex:1,marginRight:8},
+  selectFleche:{color:GOLD,fontSize:16},
+  modalFond:{flex:1,backgroundColor:'#000000AA',justifyContent:'center',padding:24},
+  modalBoite:{backgroundColor:CARD,borderRadius:12,borderWidth:1,borderColor:BORDER,padding:14,maxHeight:'80%'},
+  modalTitre:{color:GOLD,fontSize:13,fontWeight:'700',letterSpacing:1,marginBottom:10},
+  option:{paddingVertical:12,paddingHorizontal:10,borderRadius:8},
+  optionActive:{backgroundColor:GOLD},
+  optionTxt:{color:WHITE,fontSize:15},
+  optionTxtActive:{color:NAVY,fontWeight:'700'},
   ligne:{flexDirection:'row',flexWrap:'wrap',gap:8},
   chip:{paddingHorizontal:12,paddingVertical:7,borderRadius:16,borderWidth:1,borderColor:BORDER,backgroundColor:CARD},
   chipActive:{backgroundColor:GOLD,borderColor:GOLD},

@@ -10,7 +10,7 @@ import * as Updates from 'expo-updates';
 const BG='#1C1C1E',CARD='#2C2C2E',NAVY='#0F1E3C',GOLD='#C8A45A',WHITE='#FFFFFF',MUTED='#8E8E93',BORDER='#3A3A3C',SUCCESS='#2D7A4F';
 const COULEURS=['Tous','Rouge','Blanc','Rosé','Ambré'];
 const DOT_CLR={Rouge:'#8B1A2E',Blanc:'#C9B458','Rosé':'#D98A9A','Ambré':'#C8821A'};
-const FILTRES=[{id:'couleur',label:'Couleur'},{id:'region',label:'Région'},{id:'appellation',label:'Appellation'},{id:'collection',label:'Collection'},{id:'certif',label:'Certification'},{id:'coup_coeur',label:'Coup de Cœur'},{id:'club1822',label:'Club 1822'}];
+const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appellation',label:'Appellation'},{id:'couleur',label:'Couleur'},{id:'collection',label:'Collection'},{id:'certif',label:'Certification'},{id:'coup_coeur',label:'Coup de Cœur'},{id:'club1822',label:'Club 1822'}];
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
 
 const COLLECTIONS_ORDER=['Les Essentiels','Les Sélections','Gastronomie','Collection 1822','Héritage 1822','Editions Limitées'];
@@ -45,6 +45,7 @@ export default function CatalogueScreen({navigation}){
   const [ajoutConfirm,setAjoutConfirm]=useState(null);
   const [activeFilter,setActiveFilter]=useState(null);
   const [selCouleur,setSelCouleur]=useState('Tous');
+  const [selPays,setSelPays]=useState('Tous');
   const [selRegion,setSelRegion]=useState('Toutes');
   const [selApp,setSelApp]=useState('Toutes');
   const [selCol,setSelCol]=useState('Toutes');
@@ -82,11 +83,17 @@ export default function CatalogueScreen({navigation}){
     setLoading(false);
   }
 
-  const regions=useMemo(()=>['Toutes',...[...new Set(vins.map(v=>v.region).filter(Boolean))].sort()],[vins]);
+  const paysOpts=useMemo(()=>['Tous',...[...new Set(vins.map(v=>v.pays).filter(Boolean))].sort()],[vins]);
+  // Cascade : Pays → Région → Appellation
+  const regions=useMemo(()=>{
+    const base=selPays!=='Tous'?vins.filter(v=>v.pays===selPays):vins;
+    return['Toutes',...[...new Set(base.map(v=>v.region).filter(Boolean))].sort()];
+  },[vins,selPays]);
   const appells=useMemo(()=>{
-    const base=selRegion!=='Toutes'?vins.filter(v=>v.region===selRegion):vins;
+    let base=selPays!=='Tous'?vins.filter(v=>v.pays===selPays):vins;
+    if(selRegion!=='Toutes')base=base.filter(v=>v.region===selRegion);
     return['Toutes',...[...new Set(base.map(v=>v.appellation).filter(Boolean))].sort()];
-  },[vins,selRegion]);
+  },[vins,selPays,selRegion]);
   const cols=useMemo(()=>{
     const s=new Set();
     vins.forEach(v=>(v.collections||[]).forEach(c=>s.add(c)));
@@ -98,6 +105,7 @@ export default function CatalogueScreen({navigation}){
   const liste=useMemo(()=>vins.filter(v=>{
     const q=search.toLowerCase();
     if(search&&![(v.nom||''),(v.producteur||''),(v.cuvee||''),(v.appellation||'')].some(x=>x.toLowerCase().includes(q)))return false;
+    if(selPays!=='Tous'&&v.pays!==selPays)return false;
     if(selCouleur!=='Tous'&&v.couleur!==selCouleur)return false;
     if(selRegion!=='Toutes'&&v.region!==selRegion)return false;
     if(selApp!=='Toutes'&&v.appellation!==selApp)return false;
@@ -113,7 +121,7 @@ export default function CatalogueScreen({navigation}){
     if(!triPrix)return 0;
     const pa=margeOk(a)?(a.brl_public_ttc||0):triPrix==='asc'?9999999:0, pb=margeOk(b)?(b.brl_public_ttc||0):triPrix==='asc'?9999999:0;
     return triPrix==='asc'?pa-pb:pb-pa;
-  }),[vins,search,selCouleur,selRegion,selApp,selCol,selCertif,selCoupCoeur,selClub1822,triPrix]);
+  }),[vins,search,selPays,selCouleur,selRegion,selApp,selCol,selCertif,selCoupCoeur,selClub1822,triPrix]);
 
   function handleAjouter(vin){
     addLigneDevis({...vin,id:vin.produit_id,pvc_ttc_brl:prixPro(vin)});
@@ -122,6 +130,7 @@ export default function CatalogueScreen({navigation}){
   }
 
   function badgeLabel(id){
+    if(id==='pays'&&selPays!=='Tous')return selPays;
     if(id==='couleur'&&selCouleur!=='Tous')return selCouleur;
     if(id==='region'&&selRegion!=='Toutes')return selRegion;
     if(id==='appellation'&&selApp!=='Toutes')return selApp.slice(0,12);
@@ -132,6 +141,7 @@ export default function CatalogueScreen({navigation}){
     return null;
   }
   function resetFiltre(id){
+    if(id==='pays'){setSelPays('Tous');setSelRegion('Toutes');setSelApp('Toutes');}
     if(id==='couleur')setSelCouleur('Tous');
     if(id==='region')setSelRegion('Toutes');
     if(id==='appellation')setSelApp('Toutes');
@@ -220,9 +230,9 @@ export default function CatalogueScreen({navigation}){
 
   function FiltrePanel(){
     if(!activeFilter)return null;
-    const opts=activeFilter==='couleur'?COULEURS:activeFilter==='region'?regions:activeFilter==='appellation'?appells:activeFilter==='certif'?certifs:cols;
-    const sel=activeFilter==='couleur'?selCouleur:activeFilter==='region'?selRegion:activeFilter==='appellation'?selApp:activeFilter==='certif'?selCertif:selCol;
-    const setSel=activeFilter==='couleur'?setSelCouleur:activeFilter==='region'?setSelRegion:activeFilter==='appellation'?setSelApp:activeFilter==='certif'?setSelCertif:setSelCol;
+    const opts=activeFilter==='pays'?paysOpts:activeFilter==='couleur'?COULEURS:activeFilter==='region'?regions:activeFilter==='appellation'?appells:activeFilter==='certif'?certifs:cols;
+    const sel=activeFilter==='pays'?selPays:activeFilter==='couleur'?selCouleur:activeFilter==='region'?selRegion:activeFilter==='appellation'?selApp:activeFilter==='certif'?selCertif:selCol;
+    const setSel=activeFilter==='pays'?(v=>{setSelPays(v);setSelRegion('Toutes');setSelApp('Toutes');}):activeFilter==='region'?(v=>{setSelRegion(v);setSelApp('Toutes');}):activeFilter==='couleur'?setSelCouleur:activeFilter==='appellation'?setSelApp:activeFilter==='certif'?setSelCertif:setSelCol;
     const lbl=FILTRES.find(f=>f.id===activeFilter)?.label||'';
     return(
       <Modal visible animationType="slide" transparent onRequestClose={()=>setActiveFilter(null)}>

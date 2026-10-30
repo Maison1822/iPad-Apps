@@ -29,14 +29,9 @@ function prixPro(v){
   return(paliers.length>0)?paliers[0].prix_ttc:null;
 }
 // Catalogue BR : paliers autorisés (mêmes quantités que la grille BRL) convertis en € : PVC € × (1 − remise)
+// Paliers EUR autorisés (règle Retool EUR, table paliers_autorises_eur_cache) calculés dans charger()
 function paliersEur(v){
-  const base=parseFloat(v.eur_public_ttc)||0;
-  return parsePaliers(v.brl_paliers).map(p=>({
-    qte:p.qte,
-    remise:p.remise,
-    prix_ttc:Math.round(base*(1-p.remise/100)*100)/100,
-    prix_ht:Math.round(base*(1-p.remise/100)/1.2*100)/100,
-  }));
+  return parsePaliers(v.eur_palier_list);
 }
 // Prix affiché seulement si au moins un palier est autorisé
 function margeOk(v){
@@ -90,9 +85,43 @@ export default function CatalogueScreen({navigation}){
         const{data:autorises}=await supabase.from('paliers_autorises_cache').select('produit_id,qtes');
         const autorisesMap={};
         if(autorises)autorises.forEach(a=>{autorisesMap[a.produit_id]=a.qtes||[];});
+        // Catalogue BR : paliers EUR autorisés par la règle Retool EUR (paliers_autorises_eur_cache)
+        const{data:autorisesEur}=await supabase.from('paliers_autorises_eur_cache').select('produit_id,qtes');
+        const autorisesEurMap={};
+        if(autorisesEur)autorisesEur.forEach(a=>{autorisesEurMap[a.produit_id]=a.qtes||[];});
+        const brIds=data.filter(v=>AMERIQUE_SUD.includes(v.pays)).map(v=>v.produit_id);
+        const pvcEurMap={};
+        if(brIds.length){
+          const{data:pvc}=await supabase.from('Prix de Vente Conseillés').select('*')
+            .eq('Devise','EUR').in('Produit_id',brIds).order('Valide depuis',{ascending:false,nullsFirst:false});
+          if(pvc)pvc.forEach(r=>{if(!pvcEurMap[r['Produit_id']])pvcEurMap[r['Produit_id']]=r;});
+        }
+        const paliersEurAutorises=(produitId)=>{
+          const r=pvcEurMap[produitId];
+          if(!r)return[];
+          const base=parseFloat(r['Prix Public TTC'])||0;
+          const qOk=autorisesEurMap[produitId]||[];
+          const out=[];
+          for(let i=1;i<=10;i++){
+            const qte=r[`Qté Min Palier ${i}`];
+            const remise=parseFloat(r[`Remise Palier ${i} (%)`]);
+            if(qte==null||isNaN(remise)||!qOk.includes(qte))continue;
+            out.push({
+              qte,
+              remise,
+              prix_ttc:Math.round(base*(1-remise/100)*100)/100,
+              prix_ht:Math.round(base*(1-remise/100)/1.2*100)/100,
+            });
+          }
+          return out;
+        };
         const filtered=data.map(v=>{
           const qtesOk=autorisesMap[v.produit_id]||[];
-          return {...v, brl_paliers: parsePaliers(v.brl_paliers).filter(p=>qtesOk.includes(p.qte))};
+          return {
+            ...v,
+            brl_paliers: parsePaliers(v.brl_paliers).filter(p=>qtesOk.includes(p.qte)),
+            eur_palier_list: AMERIQUE_SUD.includes(v.pays)?paliersEurAutorises(v.produit_id):[],
+          };
         }).filter(v=>autorisesMap[v.produit_id]||(parseFloat(v.brl_public_ttc)>0));
         setVins(filtered);
         const ids=filtered.map(v=>v.produit_id);

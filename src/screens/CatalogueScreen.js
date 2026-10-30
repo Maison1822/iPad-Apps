@@ -28,6 +28,16 @@ function prixPro(v){
   const paliers=parsePaliers(v.brl_paliers);
   return(paliers.length>0)?paliers[0].prix_ttc:null;
 }
+// Catalogue BR : paliers autorisés (mêmes quantités que la grille BRL) convertis en € : PVC € × (1 − remise)
+function paliersEur(v){
+  const base=parseFloat(v.eur_public_ttc)||0;
+  return parsePaliers(v.brl_paliers).map(p=>({
+    qte:p.qte,
+    remise:p.remise,
+    prix_ttc:Math.round(base*(1-p.remise/100)*100)/100,
+    prix_ht:Math.round(base*(1-p.remise/100)/1.2*100)/100,
+  }));
+}
 // Prix affiché seulement si au moins un palier est autorisé
 function margeOk(v){
   if(v._ok!==undefined)return v._ok; // Catalogue BR : prix EUR disponible
@@ -44,7 +54,7 @@ export default function CatalogueScreen({navigation}){
   // Vins du catalogue affiché (FR ou BR) ; toutes les listes et filtres travaillent sur ce groupe
   // Catalogue FR : prix en R$ (vente au Brésil). Catalogue BR : prix en € (vente en France/Europe).
   const vins=useMemo(()=>vinsTous.filter(v=>AMERIQUE_SUD.includes(v.pays)===(groupe==='BR')).map(v=>groupe==='BR'
-    ?{...v,_px:v.eur_public_ttc,_ht:v.eur_public_ht,_dev:'€',_ok:parseFloat(v.eur_public_ttc)>0,brl_paliers:[]}
+    ?{...v,_px:v.eur_public_ttc,_ht:v.eur_public_ht,_dev:'€',eur_paliers:paliersEur(v),brl_paliers:[],_ok:parseFloat(v.eur_public_ttc)>0&&paliersEur(v).length>0}
     :{...v,_px:v.brl_public_ttc,_ht:v.brl_public_ht,_dev:'R$'}),[vinsTous,groupe]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState('');
@@ -72,7 +82,7 @@ export default function CatalogueScreen({navigation}){
     setLoading(true);
     try{
       const{data,error}=await supabase.from('Catalogue App')
-        .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise')
+        .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,eur_public_ttc,eur_public_ht,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise')
         .order('producteur').limit(1000);
       if(error)Alert.alert('Erreur',JSON.stringify(error));
       else if(data){
@@ -276,7 +286,7 @@ export default function CatalogueScreen({navigation}){
     const nom=item.cuvee||item.nom;
     const L=lang==='PT'?'pt':lang==='EN'?'en':'fr';
     const confirme=ajoutConfirm===item.produit_id;
-    const paliers=item.brl_paliers||[];
+    const paliers=item._dev==='€'?(item.eur_paliers||[]):(item.brl_paliers||[]);
     const cp=cepagesMap[item.produit_id]||{};
     const ceps=[[cp.cepage_1,cp.taux_cepage_1],[cp.cepage_2,cp.taux_cepage_2],[cp.cepage_3,cp.taux_cepage_3],[cp.cepage_4,cp.taux_cepage_4]].filter(([c])=>c);
 
@@ -344,7 +354,7 @@ export default function CatalogueScreen({navigation}){
             <Text style={{color:WHITE,fontSize:22,fontWeight:'300',textDecorationLine:'line-through'}}>{item._dev} {fmt(item._px)}</Text>
             <Text style={{color:MUTED,fontSize:12,marginTop:2}}>HT : {item._dev} {fmt(item._ht)}</Text>
           </View>
-          {paliers.length>0&&item._dev==='R$'&&(
+          {paliers.length>0&&(
             <View style={{backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
               <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Tarifs professionnels TTC</Text>
               <View style={{flexDirection:'row',marginBottom:8}}>
@@ -354,8 +364,8 @@ export default function CatalogueScreen({navigation}){
                 <View key={i} style={{flexDirection:'row',paddingVertical:8,borderTopWidth:1,borderTopColor:BORDER}}>
                   <Text style={{color:WHITE,fontSize:14,flex:1}}>{p.qte} bts</Text>
                   <Text style={{color:GOLD,fontSize:14,flex:1,textAlign:'right',fontWeight:'600'}}>-{p.remise}%</Text>
-                  <Text style={{color:WHITE,fontSize:14,flex:1.5,textAlign:'right'}}>R$ {fmt(p.prix_ht)}</Text>
-                  <Text style={{color:GOLD,fontSize:15,flex:1.5,textAlign:'right',fontWeight:'700'}}>R$ {fmt(p.prix_ttc)}</Text>
+                  <Text style={{color:WHITE,fontSize:14,flex:1.5,textAlign:'right'}}>{item._dev} {fmt(p.prix_ht)}</Text>
+                  <Text style={{color:GOLD,fontSize:15,flex:1.5,textAlign:'right',fontWeight:'700'}}>{item._dev} {fmt(p.prix_ttc)}</Text>
                 </View>
               ))}
             </View>

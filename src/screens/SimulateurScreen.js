@@ -60,6 +60,7 @@ function Dropdown({label,valeur,options,onChange,placeholder,disabled}){
                 <TouchableOpacity key={String(o.key)} onPress={()=>{onChange(o.key);setOuvert(false);}}
                   style={[s.option,o.key===valeur&&s.optionActive]}>
                   <Text style={[s.optionTxt,o.key===valeur&&s.optionTxtActive]}>{o.label}</Text>
+                  {!!o.sub&&<Text style={[s.optionSub,o.key===valeur&&s.optionTxtActive]}>{o.sub}</Text>}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -223,7 +224,7 @@ export default function SimulateurScreen(){
           <TextInput style={s.input} value={alcool} onChangeText={setAlcool} keyboardType="decimal-pad"/>
 
           <Dropdown label="Code NCM" valeur={ncmId} placeholder="Par défaut"
-            options={[{key:null,label:'Par défaut'},...ncmList.map(n=>({key:n.id,label:n.code}))]}
+            options={[{key:null,label:'Par défaut'},...ncmList.map(n=>({key:n.id,label:n.code,sub:n.description}))]}
             onChange={setNcmId}/>
           {!!ncmChoisi&&<Text style={s.aide}>{ncmChoisi.description}</Text>}
 
@@ -336,6 +337,7 @@ const s=StyleSheet.create({
   optionActive:{backgroundColor:GOLD},
   optionTxt:{color:WHITE,fontSize:15},
   optionTxtActive:{color:NAVY,fontWeight:'700'},
+  optionSub:{color:MUTED,fontSize:12,marginTop:2},
   ligne:{flexDirection:'row',flexWrap:'wrap',gap:8},
   chip:{paddingHorizontal:12,paddingVertical:7,borderRadius:16,borderWidth:1,borderColor:BORDER,backgroundColor:CARD},
   chipActive:{backgroundColor:GOLD,borderColor:GOLD},

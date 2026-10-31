@@ -80,6 +80,7 @@ export default function App() {
   // Session Supabase : connexion requise avant d'afficher l'application
   const [session, setSession] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [prepared, setPrepared] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -91,6 +92,27 @@ export default function App() {
     });
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // À chaque connexion : rafraîchit les caches de paliers (règles FR et BR) avant d'afficher l'app
+  useEffect(() => {
+    if (!session) {
+      setPrepared(false);
+      return;
+    }
+    let cancelled = false;
+    const timeout = new Promise(resolve => setTimeout(resolve, 8000));
+    const refresh = (async () => {
+      try {
+        await supabase.rpc('rafraichir_tous_paliers');
+      } catch (e) {
+        // silencieux : l'app s'ouvre avec les caches existants
+      }
+    })();
+    Promise.race([refresh, timeout]).then(() => {
+      if (!cancelled) setPrepared(true);
+    });
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
 
   // Auto-update : au démarrage ET à chaque remise au premier plan
   const appState = useRef(AppState.currentState);
@@ -122,7 +144,7 @@ export default function App() {
     return () => subscription.remove();
   }, []);
 
-  if (checkingSession) {
+  if (checkingSession || (session && !prepared)) {
     return (
       <View style={{ flex: 1, backgroundColor: NAVY, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={GOLD} />

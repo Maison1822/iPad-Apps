@@ -96,6 +96,12 @@ export default function CatalogueScreen({navigation}){
             .eq('Devise','EUR').in('Produit_id',brIds).order('Valide depuis',{ascending:false,nullsFirst:false});
           if(pvc)pvc.forEach(r=>{if(!pvcEurMap[r['Produit_id']])pvcEurMap[r['Produit_id']]=r;});
         }
+        // Paliers par défaut (Paliers Remise Defaut) utilisés quand le produit n'a pas ses propres paliers
+        const defMap={};
+        if(brIds.length){
+          const{data:defs}=await supabase.from('Paliers Remise Defaut').select('*');
+          if(defs)defs.forEach(d=>{defMap[d.palier]={qte:d['Qté Min'],remise:d['Remise (%)']};});
+        }
         const paliersEurAutorises=(produitId)=>{
           const r=pvcEurMap[produitId];
           if(!r)return[];
@@ -103,8 +109,8 @@ export default function CatalogueScreen({navigation}){
           const qOk=autorisesEurMap[produitId]||[];
           const out=[];
           for(let i=1;i<=10;i++){
-            const qte=r[`Qté Min Palier ${i}`];
-            const remise=parseFloat(r[`Remise Palier ${i} (%)`]);
+            const qte=r[`Qté Min Palier ${i}`]??defMap[i]?.qte;
+            const remise=parseFloat(r[`Remise Palier ${i} (%)`]??defMap[i]?.remise);
             if(qte==null||isNaN(remise)||!qOk.includes(qte))continue;
             out.push({
               qte,

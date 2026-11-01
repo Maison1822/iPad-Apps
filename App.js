@@ -11,6 +11,7 @@ import DevisScreen from './src/screens/DevisScreen';
 import CommandesScreen from './src/screens/CommandesScreen';
 import ScanScreen from './src/screens/ScanScreen';
 import ProspectsScreen from './src/screens/ProspectsScreen';
+import FournisseursScreen from './src/screens/FournisseursScreen';
 import SimulateurScreen from './src/screens/SimulateurScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { supabase } from './src/lib/supabase';
@@ -19,7 +20,7 @@ const NAVY = '#1C1C1E';
 const GOLD = '#C8A45A';
 const Tab = createBottomTabNavigator();
 
-const ICONS = { Catalogue: '🍷', Simulateur: '🧮', Clients: '👥', Devis: '📋', Commandes: '📦', Scan: '🔍', Prospects: '🎯' };
+const ICONS = { Catalogue: '🍷', Simulateur: '🧮', Clients: '👥', Devis: '📋', Commandes: '📦', Scan: '🔍', Prospects: '🎯', Fournisseurs: '🏭' };
 
 function LangSelector() {
   const { lang, setLang } = useApp();
@@ -49,7 +50,7 @@ function Badge() {
   );
 }
 
-function Nav() {
+function Nav({ isAdmin }) {
   const { t } = useApp();
   return (
     <Tab.Navigator screenOptions={({ route }) => ({
@@ -72,6 +73,7 @@ function Nav() {
       <Tab.Screen name="Commandes" component={CommandesScreen} options={{ title: t.commandes }} />
       <Tab.Screen name="Scan" component={ScanScreen} options={{ title: t.scan }} />
       <Tab.Screen name="Prospects" component={ProspectsScreen} options={{ title: 'Prospects' }} />
+      {isAdmin ? <Tab.Screen name="Fournisseurs" component={FournisseursScreen} options={{ title: 'Fournisseurs' }} /> : null}
     </Tab.Navigator>
   );
 }
@@ -81,6 +83,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [prepared, setPrepared] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -97,6 +100,7 @@ export default function App() {
   useEffect(() => {
     if (!session) {
       setPrepared(false);
+      setIsAdmin(false);
       return;
     }
     let cancelled = false;
@@ -108,7 +112,20 @@ export default function App() {
         // silencieux : l'app s'ouvre avec les caches existants
       }
     })();
-    Promise.race([refresh, timeout]).then(() => {
+    // Rôle de l'utilisateur : détermine l'affichage de l'onglet Fournisseurs (admin uniquement)
+    const role = (async () => {
+      try {
+        const { data } = await supabase
+          .from('Utilisateurs')
+          .select('Fonction')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (!cancelled) setIsAdmin(data?.Fonction === 'admin');
+      } catch (e) {
+        if (!cancelled) setIsAdmin(false);
+      }
+    })();
+    Promise.race([Promise.all([refresh, role]), timeout]).then(() => {
       if (!cancelled) setPrepared(true);
     });
     return () => { cancelled = true; };
@@ -166,7 +183,7 @@ export default function App() {
       <AppProvider>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
         <NavigationContainer>
-          <Nav />
+          <Nav isAdmin={isAdmin} />
         </NavigationContainer>
       </AppProvider>
     </SafeAreaProvider>

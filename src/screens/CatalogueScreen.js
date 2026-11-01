@@ -68,6 +68,8 @@ export default function CatalogueScreen({navigation}){
   const [selClub1822,setSelClub1822]=useState(false);
   const [triPrix,setTriPrix]=useState(null); // null | 'asc' | 'desc'
   const [cepagesMap,setCepagesMap]=useState({});
+  // Prix rendu (admin uniquement) : { id, data } ; data reste null pour un non-admin (la fonction SQL renvoie null)
+  const [renduPour,setRenduPour]=useState(null);
   const touchStartX=useRef(0);
   const ongletTouch=useRef(false);
 
@@ -177,6 +179,23 @@ export default function CatalogueScreen({navigation}){
     const pa=margeOk(a)?(a._px||0):triPrix==='asc'?9999999:0, pb=margeOk(b)?(b._px||0):triPrix==='asc'?9999999:0;
     return triPrix==='asc'?pa-pb:pb-pa;
   }),[vins,search,selPays,selCouleur,selRegion,selApp,selCol,selCertif,selCoupCoeur,selClub1822,triPrix]);
+
+  // Prix rendu admin : demandé seulement quand l'onglet « Tarifs pro » d'une fiche est ouvert
+  const produitCourantId=detailIdx!==null?liste[detailIdx]?.produit_id:null;
+  useEffect(()=>{
+    if(onglet!=='prix'||!produitCourantId)return;
+    if(renduPour&&renduPour.id===produitCourantId)return;
+    let annule=false;
+    (async()=>{
+      try{
+        const{data,error}=await supabase.rpc('prix_rendu_admin',{p_produit_id:produitCourantId});
+        if(!annule)setRenduPour({id:produitCourantId,data:(!error&&data)?data:null});
+      }catch(e){
+        if(!annule)setRenduPour({id:produitCourantId,data:null});
+      }
+    })();
+    return()=>{annule=true;};
+  },[onglet,produitCourantId]);
 
   function handleAjouter(vin){
     addLigneDevis({...vin,id:vin.produit_id,pvc_ttc_brl:prixPro(vin)});
@@ -403,6 +422,29 @@ export default function CatalogueScreen({navigation}){
                   <Text style={{color:GOLD,fontSize:15,flex:1.5,textAlign:'right',fontWeight:'700'}}>{item._dev} {fmt(p.prix_ttc)}</Text>
                 </View>
               ))}
+            </View>
+          )}
+          {renduPour&&renduPour.id===item.produit_id&&renduPour.data&&(
+            <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginTop:16,borderWidth:1,borderColor:BORDER}}>
+              <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Prix rendu (admin)</Text>
+              {renduPour.data.revient_eur_ht!=null&&(
+                <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:6}}>
+                  <Text style={{color:MUTED,fontSize:13}}>Revient France HT</Text>
+                  <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>€ {fmt(renduPour.data.revient_eur_ht)}</Text>
+                </View>
+              )}
+              {renduPour.data.rendu_brl_ht!=null&&(
+                <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:6}}>
+                  <Text style={{color:MUTED,fontSize:13}}>Rendu Brésil HT</Text>
+                  <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>R$ {fmt(renduPour.data.rendu_brl_ht)}</Text>
+                </View>
+              )}
+              {renduPour.data.rendu_brl_ttc!=null&&(
+                <View style={{flexDirection:'row',justifyContent:'space-between'}}>
+                  <Text style={{color:MUTED,fontSize:13}}>Rendu Brésil TTC</Text>
+                  <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>R$ {fmt(renduPour.data.rendu_brl_ttc)}</Text>
+                </View>
+              )}
             </View>
           )}
         </ScrollView>);

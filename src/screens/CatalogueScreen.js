@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Image, ScrollView, Alert, Modal, useWindowDimensions,
+  StyleSheet, ActivityIndicator, ScrollView, Alert, Modal, useWindowDimensions, AppState,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { ImageLocale, lireCatalogue, sauverCatalogue, prechargerPhotos, surChangementReseau } from '../lib/offline';
 import { useApp } from '../lib/AppContext';
 import * as Updates from 'expo-updates';
 
@@ -70,38 +71,80 @@ export default function CatalogueScreen({navigation}){
   const [cepagesMap,setCepagesMap]=useState({});
   // Prix rendu (admin uniquement) : { id, data } ; data reste null pour un non-admin (la fonction SQL renvoie null)
   const [renduPour,setRenduPour]=useState(null);
+  // Hors-ligne : date de la dernière synchronisation et état de la connexion
+  const [majInfo,setMajInfo]=useState(null); // { horsLigne:boolean, le:timestamp }
+  const enChargement=useRef(false);
+  const aDonnees=useRef(false);
+  const derniereSync=useRef(0);
+  const ficheOuverte=useRef(false);
+  const cepagesRef=useRef({});
   const touchStartX=useRef(0);
   const ongletTouch=useRef(false);
 
   useEffect(()=>{charger();},[]);
 
-  async function charger(){
-    setLoading(true);
+  // Resynchronisation au retour au premier plan et au retour du réseau (jamais pendant qu'une fiche est ouverte)
+  useEffect(()=>{
+    const rafraichir=()=>{
+      if(ficheOuverte.current)return;
+      if(Date.now()-derniereSync.current<60000)return;
+      charger(true);
+    };
+    const abo=AppState.addEventListener('change',e=>{if(e==='active')rafraichir();});
+    const off=surChangementReseau(enLigne=>{if(enLigne)rafraichir();});
+    return()=>{abo.remove();off();};
+  },[]);
+
+  async function charger(silencieux){
+    if(enChargement.current)return;
+    enChargement.current=true;
+    if(!silencieux){
+      setLoading(true);
+      // Copie locale affichée tout de suite : le catalogue reste consultable sans réseau
+      const copie=await lireCatalogue();
+      if(copie&&copie.vins&&copie.vins.length){
+        aDonnees.current=true;
+        cepagesRef.current=copie.cepages||{};
+        setVins(copie.vins);
+        setCepagesMap(copie.cepages||{});
+        setMajInfo({horsLigne:true,le:copie.maj});
+        setLoading(false);
+      }
+    }
+    // Échec réseau : on garde la copie locale si elle existe, sinon on prévient
+    const echec=(e)=>{
+      if(aDonnees.current)setMajInfo(m=>m?{...m,horsLigne:true}:m);
+      else Alert.alert('Erreur réseau',e&&e.message?e.message:'Connexion impossible');
+    };
     try{
       const{data,error}=await supabase.from('Catalogue App')
         .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,eur_public_ttc,eur_public_ht,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise')
         .order('producteur').limit(1000);
-      if(error)Alert.alert('Erreur',JSON.stringify(error));
+      if(error)echec(error);
       else if(data){
         // Filtrer uniquement les vins avec marge nette > 30% (paliers_autorises_cache)
-        const{data:autorises}=await supabase.from('paliers_autorises_cache').select('produit_id,qtes');
+        const{data:autorises,error:errAut}=await supabase.from('paliers_autorises_cache').select('produit_id,qtes');
+        if(errAut)throw errAut; // données incomplètes : on ne remplace pas la copie locale
         const autorisesMap={};
         if(autorises)autorises.forEach(a=>{autorisesMap[a.produit_id]=a.qtes||[];});
         // Catalogue BR : paliers EUR autorisés par la règle Retool EUR (paliers_autorises_eur_cache)
-        const{data:autorisesEur}=await supabase.from('paliers_autorises_eur_cache').select('produit_id,qtes');
+        const{data:autorisesEur,error:errAutEur}=await supabase.from('paliers_autorises_eur_cache').select('produit_id,qtes');
+        if(errAutEur)throw errAutEur;
         const autorisesEurMap={};
         if(autorisesEur)autorisesEur.forEach(a=>{autorisesEurMap[a.produit_id]=a.qtes||[];});
         const brIds=data.filter(v=>AMERIQUE_SUD.includes(v.pays)).map(v=>v.produit_id);
         const pvcEurMap={};
         if(brIds.length){
-          const{data:pvc}=await supabase.from('Prix de Vente Conseillés').select('*')
+          const{data:pvc,error:errPvc}=await supabase.from('Prix de Vente Conseillés').select('*')
             .eq('Devise','EUR').in('Produit_id',brIds).order('Valide depuis',{ascending:false,nullsFirst:false});
+          if(errPvc)throw errPvc;
           if(pvc)pvc.forEach(r=>{if(!pvcEurMap[r['Produit_id']])pvcEurMap[r['Produit_id']]=r;});
         }
         // Paliers par défaut (Paliers Remise Defaut) utilisés quand le produit n'a pas ses propres paliers
         const defMap={};
         if(brIds.length){
-          const{data:defs}=await supabase.from('Paliers Remise Defaut').select('*');
+          const{data:defs,error:errDefs}=await supabase.from('Paliers Remise Defaut').select('*');
+          if(errDefs)throw errDefs;
           if(defs)defs.forEach(d=>{defMap[d.palier]={qte:d['Qté Min'],remise:d['Remise (%)']};});
         }
         const paliersEurAutorises=(produitId)=>{
@@ -134,9 +177,17 @@ export default function CatalogueScreen({navigation}){
         setVins(filtered);
         const ids=filtered.map(v=>v.produit_id);
         const{data:cp}=await supabase.from('Catalogue Cepages').select('*').in('produit_id',ids);
-        if(cp){const m={};cp.forEach(c=>{m[c.produit_id]=c;});setCepagesMap(m);}
+        let cepages=cepagesRef.current;
+        if(cp){const m={};cp.forEach(c=>{m[c.produit_id]=c;});cepages=m;cepagesRef.current=m;setCepagesMap(m);}
+        // Synchronisation réussie : on remplace la copie locale puis on précharge les photos (Wi-Fi)
+        aDonnees.current=true;
+        derniereSync.current=Date.now();
+        setMajInfo({horsLigne:false,le:derniereSync.current});
+        sauverCatalogue({vins:filtered,cepages});
+        prechargerPhotos(filtered.flatMap(v=>[v.vignette_url,v.photo_url]));
       }
-    }catch(e){Alert.alert('Erreur réseau',e.message);}
+    }catch(e){echec(e);}
+    enChargement.current=false;
     setLoading(false);
   }
 
@@ -182,6 +233,7 @@ export default function CatalogueScreen({navigation}){
 
   // Prix rendu admin : demandé seulement quand l'onglet « Tarifs pro » d'une fiche est ouvert
   const produitCourantId=detailIdx!==null?liste[detailIdx]?.produit_id:null;
+  ficheOuverte.current=detailIdx!==null;
   useEffect(()=>{
     if(onglet!=='prix'||!produitCourantId)return;
     if(renduPour&&renduPour.id===produitCourantId)return;
@@ -261,7 +313,7 @@ export default function CatalogueScreen({navigation}){
     const nom=item.cuvee||item.nom;
     return(
       <TouchableOpacity style={s.row} onPress={()=>ouvrirDetail(idx)}>
-        {item.vignette_url?<Image source={{uri:item.vignette_url}} style={s.thumb} resizeMode="contain"/>:<View style={[s.thumb,s.thumbPh]}><Dot c={item.couleur}/></View>}
+        {item.vignette_url?<ImageLocale url={item.vignette_url} style={s.thumb} resizeMode="contain"/>:<View style={[s.thumb,s.thumbPh]}><Dot c={item.couleur}/></View>}
         <View style={s.rowInfo}>
           <View style={{flexDirection:'row',alignItems:'center',gap:6,marginBottom:2}}>
             <Dot c={item.couleur}/>
@@ -285,7 +337,7 @@ export default function CatalogueScreen({navigation}){
     return(
       <TouchableOpacity style={s.card} onPress={()=>ouvrirDetail(idx)}>
         <View style={s.cardPhotoZone}>
-          {item.vignette_url?<Image source={{uri:item.vignette_url}} style={s.cardPhoto} resizeMode="contain"/>:<View style={[s.cardPhoto,s.thumbPh]}><Dot c={item.couleur}/></View>}
+          {item.vignette_url?<ImageLocale url={item.vignette_url} style={s.cardPhoto} resizeMode="contain"/>:<View style={[s.cardPhoto,s.thumbPh]}><Dot c={item.couleur}/></View>}
         </View>
         <View style={s.cardInfoZone}>
           <View style={{flexDirection:'row',alignItems:'center',gap:5,marginBottom:4}}><Dot c={item.couleur}/><Text style={{color:MUTED,fontSize:10,textTransform:'uppercase',letterSpacing:1}}>{item.couleur}</Text></View>
@@ -466,7 +518,7 @@ export default function CatalogueScreen({navigation}){
         <View style={{width:'33%',backgroundColor:'#111',alignItems:'center',justifyContent:'space-between',paddingVertical:20}}>
           <Text style={{color:MUTED,fontSize:12}}>{detailIdx+1} / {liste.length}</Text>
           {(item.photo_url||item.vignette_url)&&(
-            <Image source={{uri:item.photo_url||item.vignette_url}} style={{width:'85%',flex:1,marginVertical:12}} resizeMode="contain"/>
+            <ImageLocale url={item.photo_url||item.vignette_url} style={{width:'85%',flex:1,marginVertical:12}} resizeMode="contain"/>
           )}
           <TouchableOpacity
             style={{backgroundColor:confirme?SUCCESS:GOLD,borderRadius:10,paddingHorizontal:20,paddingVertical:12,width:'80%',alignItems:'center'}}
@@ -558,7 +610,10 @@ export default function CatalogueScreen({navigation}){
           </Text>
         </TouchableOpacity>
       </View>
-      <Text style={{paddingHorizontal:20,paddingBottom:4,fontSize:11,color:MUTED}}>{liste.length} vins</Text>
+      <Text style={{paddingHorizontal:20,paddingBottom:4,fontSize:11,color:MUTED}}>
+        {liste.length} vins
+        {majInfo?` · ${majInfo.horsLigne?'hors ligne, copie du ':'mis à jour le '}${new Date(majInfo.le).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`:''}
+      </Text>
       {loading?<ActivityIndicator color={GOLD} size="large" style={{marginTop:60}}/>
         :vue==='liste'
           ?<FlatList key="liste" data={liste} keyExtractor={(item)=>item.produit_id}

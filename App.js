@@ -16,6 +16,7 @@ import FournisseursScreen from './src/screens/FournisseursScreen';
 import SimulateurScreen from './src/screens/SimulateurScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { supabase } from './src/lib/supabase';
+import { lireEstAdmin, sauverEstAdmin } from './src/lib/offline';
 
 const NAVY = '#1C1C1E';
 const GOLD = '#C8A45A';
@@ -116,14 +117,23 @@ export default function App() {
     // Rôle de l'utilisateur : détermine l'affichage de l'onglet Fournisseurs (admin uniquement)
     const role = (async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('Utilisateurs')
           .select('Fonction')
           .eq('id', session.user.id)
           .maybeSingle();
-        if (!cancelled) setIsAdmin(data?.Fonction === 'admin');
+        if (error) {
+          // Hors réseau : on garde le dernier rôle connu pour que l'onglet Fournisseurs reste disponible
+          const connu = await lireEstAdmin();
+          if (!cancelled) setIsAdmin(connu);
+        } else {
+          const admin = data?.Fonction === 'admin';
+          sauverEstAdmin(admin);
+          if (!cancelled) setIsAdmin(admin);
+        }
       } catch (e) {
-        if (!cancelled) setIsAdmin(false);
+        const connu = await lireEstAdmin();
+        if (!cancelled) setIsAdmin(connu);
       }
     })();
     Promise.race([Promise.all([refresh, role]), timeout]).then(() => {

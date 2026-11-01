@@ -11,6 +11,94 @@ const ETAPE_CLR={
 const FILTRES=['Tous','En cours','Intégrés','Suspendus'];
 const NOTES=[1,2,3,4,5];
 
+const couleurEtape=code=>ETAPE_CLR[code]||MUTED;
+
+// Ligne de liste : composant hors de l'écran, pour éviter de le recréer à chaque rendu
+function LigneFournisseur({ item, code, date, libelle, onPress }){
+  const couleur=couleurEtape(code);
+  return(
+    <TouchableOpacity style={s.row} onPress={()=>onPress(item)} activeOpacity={0.7}>
+      <View style={{flex:1}}>
+        <Text style={s.rowNom} numberOfLines={1}>{item.Domaine||'—'}</Text>
+        <Text style={{color:MUTED,fontSize:11,marginTop:2}}>{item.Pays||''}{date?` · ${date}`:''}</Text>
+      </View>
+      <View style={[s.badge,{borderColor:couleur,backgroundColor:couleur+'30'}]}>
+        <Text style={{color:couleur,fontSize:11,fontWeight:'600'}}>{libelle}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// Fiche modale : composant hors de l'écran, reçoit ses données en propriétés
+function FicheFournisseur({ selected, etapes, etapeChoisie, setEtapeChoisie, dateTxt, setDateTxt, note, setNote, commentaire, setCommentaire, saving, historique, libelleEtape, onFermer, onEnregistrer }){
+  if(!selected)return null;
+  return(
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onFermer}>
+      <View style={{flex:1,backgroundColor:BG}}>
+        <View style={s.modalHeader}>
+          <Text style={s.modalTitre} numberOfLines={1}>{selected.Domaine}</Text>
+          <TouchableOpacity onPress={onFermer}>
+            <Text style={{color:GOLD,fontSize:24}}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{padding:20,paddingBottom:60}}>
+          <Text style={s.sectionTitre}>Étape</Text>
+          <View style={{gap:8}}>
+            {etapes.map(et=>(
+              <TouchableOpacity key={et.code} onPress={()=>setEtapeChoisie(et.code)}
+                style={[s.etapeOption,etapeChoisie===et.code&&{borderColor:GOLD,backgroundColor:GOLD+'20'}]}>
+                <Text style={{color:etapeChoisie===et.code?GOLD:WHITE,fontSize:14,fontWeight:etapeChoisie===et.code?'700':'400'}}>
+                  {et.ordre}. {et.libelle}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={[s.sectionTitre,{marginTop:20}]}>Date (AAAA-MM-JJ, facultatif)</Text>
+          <TextInput style={s.input} placeholder="2026-11-01" placeholderTextColor={MUTED}
+            value={dateTxt} onChangeText={setDateTxt} autoCapitalize="none"/>
+
+          {etapeChoisie==='degustation'&&(
+            <>
+              <Text style={[s.sectionTitre,{marginTop:20}]}>Note sur 5</Text>
+              <View style={{flexDirection:'row',gap:10}}>
+                {NOTES.map(n=>(
+                  <TouchableOpacity key={n} onPress={()=>setNote(n)}
+                    style={[s.noteBtn,note===n&&{backgroundColor:GOLD,borderColor:GOLD}]}>
+                    <Text style={{color:note===n?NAVY:WHITE,fontWeight:'700'}}>{n}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          <Text style={[s.sectionTitre,{marginTop:20}]}>Commentaire</Text>
+          <TextInput style={[s.input,{minHeight:80,textAlignVertical:'top'}]} multiline placeholder="Facultatif"
+            placeholderTextColor={MUTED} value={commentaire} onChangeText={setCommentaire}/>
+
+          <TouchableOpacity style={[s.boutonSave,(!etapeChoisie||saving)&&{opacity:0.5}]}
+            onPress={onEnregistrer} disabled={!etapeChoisie||saving}>
+            {saving?<ActivityIndicator color={BG}/>:<Text style={s.boutonSaveTxt}>Enregistrer l'étape</Text>}
+          </TouchableOpacity>
+
+          <Text style={[s.sectionTitre,{marginTop:28}]}>Historique</Text>
+          {historique.length===0&&<Text style={{color:MUTED,fontSize:13}}>Aucun historique.</Text>}
+          {historique.map(h=>(
+            <View key={h.id} style={s.histoLigne}>
+              <Text style={{color:couleurEtape(h.etape_code),fontSize:13,fontWeight:'700'}}>{libelleEtape(h.etape_code)}</Text>
+              <Text style={{color:MUTED,fontSize:12,marginTop:2}}>
+                {h.date_etape||new Date(h.cree_le).toLocaleDateString('fr-FR')}
+                {h.note_sur_5!=null?` · ${h.note_sur_5}/5`:''}
+              </Text>
+              {!!h.commentaire&&<Text style={{color:WHITE,fontSize:13,marginTop:4}}>{h.commentaire}</Text>}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 export default function FournisseursScreen(){
   const [fournisseurs,setFournisseurs]=useState([]);
   const [suivis,setSuivis]=useState({});
@@ -30,21 +118,20 @@ export default function FournisseursScreen(){
 
   async function charger(){
     setLoading(true);
-    const [f,s,e]=await Promise.all([
+    const [f,s2,e]=await Promise.all([
       supabase.from('Fournisseurs').select('*').order('Domaine'),
       supabase.from('Suivi Fournisseurs').select('*'),
       supabase.from('Etapes Fournisseurs').select('*').order('ordre'),
     ]);
-    const err=f.error||s.error||e.error;
+    const err=f.error||s2.error||e.error;
     if(err)Alert.alert('Erreur',err.message);
     setFournisseurs(f.data||[]);
-    setSuivis(Object.fromEntries((s.data||[]).map(x=>[x.fournisseur_id,x])));
+    setSuivis(Object.fromEntries((s2.data||[]).map(x=>[x.fournisseur_id,x])));
     setEtapes(e.data||[]);
     setLoading(false);
   }
 
   const libelleEtape=code=>etapes.find(x=>x.code===code)?.libelle||'Non suivi';
-  const couleurEtape=code=>ETAPE_CLR[code]||MUTED;
 
   const liste=useMemo(()=>{
     const q=search.toLowerCase();
@@ -71,6 +158,10 @@ export default function FournisseursScreen(){
     else setHistorique(data||[]);
   }
 
+  function fermer(){
+    setSelected(null);
+  }
+
   async function enregistrer(){
     if(!selected||!etapeChoisie)return;
     if(dateTxt&&!/^\d{4}-\d{2}-\d{2}$/.test(dateTxt)){
@@ -91,75 +182,6 @@ export default function FournisseursScreen(){
     if(e2){Alert.alert('Erreur',e2.message);return;}
     setSuivis(prev=>({...prev,[selected.id]:{fournisseur_id:selected.id,etape_code:etapeChoisie,date_etape:date}}));
     setSelected(null);
-  }
-
-  function FicheModale(){
-    if(!selected)return null;
-    return(
-      <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>setSelected(null)}>
-        <View style={{flex:1,backgroundColor:BG}}>
-          <View style={s.modalHeader}>
-            <Text style={s.modalTitre} numberOfLines={1}>{selected.Domaine}</Text>
-            <TouchableOpacity onPress={()=>setSelected(null)}>
-              <Text style={{color:GOLD,fontSize:24}}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={{padding:20,paddingBottom:60}}>
-            <Text style={s.sectionTitre}>Étape</Text>
-            <View style={{gap:8}}>
-              {etapes.map(et=>(
-                <TouchableOpacity key={et.code} onPress={()=>setEtapeChoisie(et.code)}
-                  style={[s.etapeOption,etapeChoisie===et.code&&{borderColor:GOLD,backgroundColor:GOLD+'20'}]}>
-                  <Text style={{color:etapeChoisie===et.code?GOLD:WHITE,fontSize:14,fontWeight:etapeChoisie===et.code?'700':'400'}}>
-                    {et.ordre}. {et.libelle}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[s.sectionTitre,{marginTop:20}]}>Date (AAAA-MM-JJ, facultatif)</Text>
-            <TextInput style={s.input} placeholder="2026-11-01" placeholderTextColor={MUTED}
-              value={dateTxt} onChangeText={setDateTxt} autoCapitalize="none"/>
-
-            {etapeChoisie==='degustation'&&(
-              <>
-                <Text style={[s.sectionTitre,{marginTop:20}]}>Note sur 5</Text>
-                <View style={{flexDirection:'row',gap:10}}>
-                  {NOTES.map(n=>(
-                    <TouchableOpacity key={n} onPress={()=>setNote(n)}
-                      style={[s.noteBtn,note===n&&{backgroundColor:GOLD,borderColor:GOLD}]}>
-                      <Text style={{color:note===n?NAVY:WHITE,fontWeight:'700'}}>{n}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-
-            <Text style={[s.sectionTitre,{marginTop:20}]}>Commentaire</Text>
-            <TextInput style={[s.input,{minHeight:80,textAlignVertical:'top'}]} multiline placeholder="Facultatif"
-              placeholderTextColor={MUTED} value={commentaire} onChangeText={setCommentaire}/>
-
-            <TouchableOpacity style={[s.boutonSave,(!etapeChoisie||saving)&&{opacity:0.5}]}
-              onPress={enregistrer} disabled={!etapeChoisie||saving}>
-              {saving?<ActivityIndicator color={BG}/>:<Text style={s.boutonSaveTxt}>Enregistrer l'étape</Text>}
-            </TouchableOpacity>
-
-            <Text style={[s.sectionTitre,{marginTop:28}]}>Historique</Text>
-            {historique.length===0&&<Text style={{color:MUTED,fontSize:13}}>Aucun historique.</Text>}
-            {historique.map(h=>(
-              <View key={h.id} style={s.histoLigne}>
-                <Text style={{color:couleurEtape(h.etape_code),fontSize:13,fontWeight:'700'}}>{libelleEtape(h.etape_code)}</Text>
-                <Text style={{color:MUTED,fontSize:12,marginTop:2}}>
-                  {h.date_etape||new Date(h.cree_le).toLocaleDateString('fr-FR')}
-                  {h.note_sur_5!=null?` · ${h.note_sur_5}/5`:''}
-                </Text>
-                {!!h.commentaire&&<Text style={{color:WHITE,fontSize:13,marginTop:4}}>{h.commentaire}</Text>}
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
-    );
   }
 
   return(
@@ -194,24 +216,35 @@ export default function FournisseursScreen(){
           keyExtractor={item=>item.id}
           ItemSeparatorComponent={()=><View style={{height:1,backgroundColor:BORDER}}/>}
           contentContainerStyle={{paddingBottom:100}}
-          renderItem={({item})=>{
-            const code=suivis[item.id]?.etape_code||null;
-            const date=suivis[item.id]?.date_etape;
-            return(
-              <TouchableOpacity style={s.row} onPress={()=>ouvrir(item)} activeOpacity={0.7}>
-                <View style={{flex:1}}>
-                  <Text style={s.rowNom} numberOfLines={1}>{item.Domaine||'—'}</Text>
-                  <Text style={{color:MUTED,fontSize:11,marginTop:2}}>{item.Pays||''}{date?` · ${date}`:''}</Text>
-                </View>
-                <View style={[s.badge,{borderColor:couleurEtape(code)||MUTED,backgroundColor:(couleurEtape(code)||MUTED)+'30'}]}>
-                  <Text style={{color:couleurEtape(code)||MUTED,fontSize:11,fontWeight:'600'}}>{libelleEtape(code)}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={({item})=>(
+            <LigneFournisseur
+              item={item}
+              code={suivis[item.id]?.etape_code||null}
+              date={suivis[item.id]?.date_etape}
+              libelle={libelleEtape(suivis[item.id]?.etape_code||null)}
+              onPress={ouvrir}
+            />
+          )}
         />
       }
-      <FicheModale/>
+
+      <FicheFournisseur
+        selected={selected}
+        etapes={etapes}
+        etapeChoisie={etapeChoisie}
+        setEtapeChoisie={setEtapeChoisie}
+        dateTxt={dateTxt}
+        setDateTxt={setDateTxt}
+        note={note}
+        setNote={setNote}
+        commentaire={commentaire}
+        setCommentaire={setCommentaire}
+        saving={saving}
+        historique={historique}
+        libelleEtape={libelleEtape}
+        onFermer={fermer}
+        onEnregistrer={enregistrer}
+      />
     </View>
   );
 }

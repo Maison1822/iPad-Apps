@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, ScrollView } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { BoutonsContact } from '../lib/contact';
+import CarnetVisite from '../components/CarnetVisite';
 
 const BG='#1C1C1E',CARD='#2C2C2E',GOLD='#C8A45A',WHITE='#FFFFFF',MUTED='#8E8E93',BORDER='#3A3A3C',NAVY='#0F1E3C',RED='#7A2138';
 const ETAPE_CLR={
@@ -204,6 +206,9 @@ function FicheFournisseur({ selected, etapes, suivi, libelleEtape, onFermer, onS
           </TouchableOpacity>
 
           <Text style={[s.sectionTitre,{marginTop:32}]}>Coordonnées</Text>
+          <View style={{marginBottom:12}}>
+            <BoutonsContact telephone={selected['Téléphone']} email={selected.Email} pays={selected.Pays}/>
+          </View>
           {CHAMPS_COORD.map(c=>(
             <Champ key={c.cle} label={c.label} valeur={coord[c.cle]} clavier={c.clavier} multiline={c.multiline}
               onChange={t=>setCoord(prev=>({...prev,[c.cle]:t}))}/>
@@ -229,6 +234,7 @@ function FicheFournisseur({ selected, etapes, suivi, libelleEtape, onFermer, onS
               {!!c.email&&<Text style={s.ligneContact}>✉️  {c.email}</Text>}
               {!!c.telephone&&<Text style={s.ligneContact}>📞  {c.telephone}</Text>}
               {!!c.whatsapp&&<Text style={s.ligneContact}>💬  WhatsApp : {c.whatsapp}</Text>}
+              <BoutonsContact telephone={c.telephone} whatsapp={c.whatsapp} email={c.email} pays={selected.Pays}/>
             </View>
           ))}
 
@@ -258,6 +264,10 @@ function FicheFournisseur({ selected, etapes, suivi, libelleEtape, onFermer, onS
               <Text style={{color:GOLD,fontWeight:'700'}}>+ Ajouter un correspondant</Text>
             </TouchableOpacity>
           )}
+
+          <View style={{marginTop:32}}>
+            <CarnetVisite type="fournisseur" id={selected.id}/>
+          </View>
 
           <Text style={[s.sectionTitre,{marginTop:32}]}>Historique</Text>
           {historique.length===0&&<Text style={{color:MUTED,fontSize:13}}>Aucun historique.</Text>}

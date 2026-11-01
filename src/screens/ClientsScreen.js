@@ -6,6 +6,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { COLORS, SPACING, RADIUS } from '../lib/theme';
 import { useApp } from '../lib/AppContext';
+import { BoutonsContact } from '../lib/contact';
+import CarnetVisite from '../components/CarnetVisite';
 
 const emptyForm = {
   Nom: '', Prénom: '', Société: '', Email: '', Téléphone: '',
@@ -168,6 +170,12 @@ export default function ClientsScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {editId && (
+            <View style={{ paddingHorizontal: 20 }}>
+              <BoutonsContact telephone={form['Téléphone']} email={form.Email} pays={form.Pays} />
+            </View>
+          )}
+
           <Field label={t.nom} field="Nom" />
           <Field label="Prénom" field="Prénom" />
           <Field label={t.etablissement} field="Société" />
@@ -190,6 +198,12 @@ export default function ClientsScreen({ navigation }) {
                   <Text style={[styles.devisStatut, d.statut === 'Validé' && { color: COLORS.success }]}>{d.statut || '—'}</Text>
                 </View>
               ))}
+            </View>
+          )}
+
+          {editId && (
+            <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+              <CarnetVisite type="client" id={editId} />
             </View>
           )}
 

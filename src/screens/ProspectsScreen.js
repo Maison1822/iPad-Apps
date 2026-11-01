@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, ScrollView } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { BoutonsContact } from '../lib/contact';
+import CarnetVisite from '../components/CarnetVisite';
 
 const BG='#1C1C1E',CARD='#2C2C2E',GOLD='#C8A45A',WHITE='#FFFFFF',MUTED='#8E8E93',BORDER='#3A3A3C',NAVY='#0F1E3C';
 const STATUT_CLR={'À contacter':'#8E8E93','Contacté':'#C8A45A','En cours':'#4A90D9','Chaud':'#E67E22','Client':'#2D7A4F','Perdu':'#7A2138','Suspendu':'#555'};
@@ -136,8 +138,13 @@ export default function ProspectsScreen(){
               <Text style={{color:GOLD,fontSize:24}}>✕</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{padding:20}}>
+          <ScrollView contentContainerStyle={{padding:20,paddingBottom:120}} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <StatutBadge statut={selected.statut}/>
+            <BoutonsContact
+              telephone={selected.telephone_portable||selected.telephone_fixe}
+              whatsapp={selected.whatsapp}
+              email={selected.email}
+              pays={selected.pays}/>
             <View style={{marginTop:16,gap:10}}>
               {[
                 ['SIRET / CNPJ',selected.siret_cnpj],
@@ -169,6 +176,9 @@ export default function ProspectsScreen(){
                   <Text style={{color:WHITE,fontSize:14,lineHeight:22}}>{selected.notes}</Text>
                 </View>
               )}
+              <View style={{marginTop:24}}>
+                <CarnetVisite type="prospect" id={selected.id}/>
+              </View>
             </View>
           </ScrollView>
         </View>

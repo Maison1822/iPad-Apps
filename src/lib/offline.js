@@ -4,8 +4,13 @@
 import React, { useEffect, useState } from 'react';
 import { Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File, Directory, Paths } from 'expo-file-system';
-import * as Network from 'expo-network';
+
+// Modules natifs chargés de façon tolérante : si le binaire installé sur l'appareil ne les contient pas
+// (mise à jour OTA appliquée sur une app plus ancienne), l'app continue de fonctionner sans cache photos ni détection réseau.
+let FS = null;
+try { FS = require('expo-file-system'); } catch (e) { FS = null; }
+let Network = null;
+try { Network = require('expo-network'); } catch (e) { Network = null; }
 
 const CLE_CATALOGUE = 'maison1822_catalogue_v1';
 const CLE_ADMIN = 'maison1822_est_admin_v1';
@@ -43,6 +48,7 @@ export async function lireEstAdmin() {
 // ---------- Réseau ----------
 
 export async function estEnLigne() {
+  if (!Network) return true;
   try {
     const etat = await Network.getNetworkStateAsync();
     return !!etat.isConnected && etat.isInternetReachable !== false;
@@ -52,10 +58,15 @@ export async function estEnLigne() {
 }
 
 export function surChangementReseau(rappel) {
-  const abonnement = Network.addNetworkStateListener((etat) => {
-    rappel(!!etat.isConnected && etat.isInternetReachable !== false);
-  });
-  return () => abonnement.remove();
+  if (!Network) return () => {};
+  try {
+    const abonnement = Network.addNetworkStateListener((etat) => {
+      rappel(!!etat.isConnected && etat.isInternetReachable !== false);
+    });
+    return () => abonnement.remove();
+  } catch (e) {
+    return () => {};
+  }
 }
 
 // ---------- Photos ----------
@@ -63,7 +74,7 @@ export function surChangementReseau(rappel) {
 let dossierPhotos = null;
 function dossier() {
   if (!dossierPhotos) {
-    dossierPhotos = new Directory(Paths.document, 'photos');
+    dossierPhotos = new FS.Directory(FS.Paths.document, 'photos');
     try { dossierPhotos.create({ intermediates: true, idempotent: true }); } catch (e) { /* déjà créé */ }
   }
   return dossierPhotos;
@@ -76,12 +87,12 @@ function nomFichier(url) {
 }
 
 function fichierPour(url) {
-  return new File(dossier(), nomFichier(url));
+  return new FS.File(dossier(), nomFichier(url));
 }
 
 // Adresse locale si la photo est déjà en cache, sinon null
 export function uriLocale(url) {
-  if (!url) return null;
+  if (!url || !FS) return null;
   try {
     const f = fichierPour(url);
     return f.exists ? f.uri : null;
@@ -93,14 +104,14 @@ export function uriLocale(url) {
 const enCours = new Map(); // url -> promesse, évite les téléchargements en double
 
 export function telechargerPhoto(url) {
-  if (!url) return Promise.resolve(null);
+  if (!url || !FS) return Promise.resolve(null);
   const deja = uriLocale(url);
   if (deja) return Promise.resolve(deja);
   if (enCours.has(url)) return enCours.get(url);
   const p = (async () => {
     try {
       const f = fichierPour(url);
-      const sortie = await File.downloadFileAsync(url, f, { idempotent: true });
+      const sortie = await FS.File.downloadFileAsync(url, f, { idempotent: true });
       return sortie.uri;
     } catch (e) {
       return null; // l'image distante reste utilisée
@@ -114,6 +125,7 @@ export function telechargerPhoto(url) {
 
 // Précharge toutes les photos (3 en parallèle), seulement en Wi-Fi ou câble
 export async function prechargerPhotos(urls) {
+  if (!Network || !FS) return;
   try {
     const etat = await Network.getNetworkStateAsync();
     const type = etat.type;

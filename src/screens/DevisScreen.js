@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { COLORS, SPACING, RADIUS } from '../lib/theme';
 import { useApp } from '../lib/AppContext';
 import SignaturePad from '../components/SignaturePad';
+import { envoyerOuMettreEnFile } from '../lib/outbox';
 
 const ICMS_PAR_ETAT = {
   SP: 18, RJ: 20, MG: 18, RS: 17, PR: 15, SC: 17,
@@ -240,8 +241,11 @@ export default function DevisScreen() {
       signature_client: signatureClient,
       signature_commercial: signatureCommercial,
     };
-    const { error } = await supabase.from('Devis').upsert(payload, { onConflict: 'numero' });
-    if (!error) Alert.alert(t.succes, statut === 'Envoyé' ? t.devis_envoye : t.devis_enregistre);
+    // Enregistrement par numéro : rejouable sans doublon. Sans réseau, le devis est gardé sur l'appareil puis envoyé plus tard.
+    const resultat = await envoyerOuMettreEnFile({ table: 'Devis', payload, onConflict: 'numero', libelle: `Devis ${numero}` });
+    if (resultat.statut === 'envoye') Alert.alert(t.succes, statut === 'Envoyé' ? t.devis_envoye : t.devis_enregistre);
+    else if (resultat.statut === 'en_attente') Alert.alert('Hors ligne', "Le devis est enregistré sur l'appareil. Il sera envoyé dès le retour du réseau.");
+    else Alert.alert(t.erreur, resultat.error?.message || 'Enregistrement refusé.');
   }
 
   function LigneDevis({ item }) {

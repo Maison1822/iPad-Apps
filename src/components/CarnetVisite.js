@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { envoyerOuMettreEnFile, nouvelUuid } from '../lib/outbox';
 
 const GOLD = '#C8A45A', WHITE = '#FFFFFF', MUTED = '#8E8E93', BORDER = '#3A3A3C', CARD = '#2C2C2E', NAVY = '#0F1E3C';
 const COLONNE = { prospect: 'prospect_id', client: 'client_id', fournisseur: 'fournisseur_id' };
@@ -50,17 +51,22 @@ export default function CarnetVisite({ type, id }) {
     if (!REGEX_DATE.test(form.date_visite)) { Alert.alert('Date de visite', 'Format attendu : AAAA-MM-JJ'); return; }
     if (form.date_relance && !REGEX_DATE.test(form.date_relance)) { Alert.alert('Date de relance', 'Format attendu : AAAA-MM-JJ'); return; }
     setEnregistrement(true);
-    const { data, error } = await supabase.from('Notes de Visite').insert({
+    // L'identifiant est créé ici : si le réseau manque, la note est gardée sur l'appareil puis envoyée plus tard sans doublon.
+    const payload = {
+      id: nouvelUuid(),
       [colonne]: id,
       date_visite: form.date_visite,
       resume,
       prochaine_action: (form.prochaine_action || '').trim() || null,
       date_relance: form.date_relance || null,
-    }).select().maybeSingle();
+    };
+    const resultat = await envoyerOuMettreEnFile({ table: 'Notes de Visite', payload, onConflict: 'id', libelle: 'Note de visite' });
     setEnregistrement(false);
-    if (error || !data) { Alert.alert('Erreur', error ? error.message : 'Enregistrement refusé (droits insuffisants).'); return; }
-    setNotes((prev) => [data, ...prev]);
+    if (resultat.statut === 'erreur') { Alert.alert('Erreur', resultat.error?.message || 'Enregistrement refusé (droits insuffisants).'); return; }
+    const attente = resultat.statut === 'en_attente';
+    setNotes((prev) => [{ ...payload, fait: false, enAttente: attente }, ...prev]);
     setForm(null);
+    if (attente) Alert.alert('Hors ligne', "La note est enregistrée sur l'appareil. Elle sera envoyée dès le retour du réseau.");
   }
 
   async function basculerFait(note) {
@@ -86,10 +92,10 @@ export default function CarnetVisite({ type, id }) {
 
       {notes.map((n) => (
         <View key={n.id} style={{ backgroundColor: CARD, borderRadius: 10, borderWidth: 1, borderColor: BORDER, padding: 14, marginBottom: 10, opacity: n.fait ? 0.6 : 1 }}>
-          <Text style={{ color: GOLD, fontSize: 12, fontWeight: '700' }}>{formatDate(n.date_visite)}</Text>
+          <Text style={{ color: GOLD, fontSize: 12, fontWeight: '700' }}>{formatDate(n.date_visite)}{n.enAttente ? "  ·  ⏳ en attente d'envoi" : ''}</Text>
           <Text style={{ color: WHITE, fontSize: 14, marginTop: 4, lineHeight: 20 }}>{n.resume}</Text>
           {!!n.prochaine_action && <Text style={{ color: WHITE, fontSize: 13, marginTop: 6 }}>➜ {n.prochaine_action}</Text>}
-          {(!!n.date_relance || !!n.prochaine_action) && (
+          {(!!n.date_relance || !!n.prochaine_action) && !n.enAttente && (
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
               <Text style={{ color: MUTED, fontSize: 12 }}>{n.date_relance ? `Relance le ${formatDate(n.date_relance)}` : ''}</Text>
               <TouchableOpacity onPress={() => basculerFait(n)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>

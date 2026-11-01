@@ -16,13 +16,16 @@ import FournisseursScreen from './src/screens/FournisseursScreen';
 import SimulateurScreen from './src/screens/SimulateurScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { supabase } from './src/lib/supabase';
-import { lireEstAdmin, sauverEstAdmin } from './src/lib/offline';
+import { lireEstAdmin, sauverEstAdmin, surChangementReseau } from './src/lib/offline';
+import { viderFile, surNombreEnAttente } from './src/lib/outbox';
+import RelancesScreen from './src/screens/RelancesScreen';
+import { surNombreRelances, rafraichirNombreRelances } from './src/lib/relances';
 
 const NAVY = '#1C1C1E';
 const GOLD = '#C8A45A';
 const Tab = createBottomTabNavigator();
 
-const ICONS = { Catalogue: 'wine', Simulateur: 'calculator', Clients: 'people', Devis: 'document-text', Commandes: 'cube', Scan: 'scan', Prospects: 'locate', Fournisseurs: 'business' };
+const ICONS = { Catalogue: 'wine', Simulateur: 'calculator', Clients: 'people', Devis: 'document-text', Commandes: 'cube', Scan: 'scan', Prospects: 'locate', Relances: 'notifications', Fournisseurs: 'business' };
 
 function LangSelector() {
   const { lang, setLang } = useApp();
@@ -52,9 +55,44 @@ function Badge() {
   );
 }
 
+// Bandeau affiché tant que des éléments faits hors ligne attendent d'être envoyés
+function BandeauEnvoi() {
+  const [n, setN] = useState(0);
+  useEffect(() => surNombreEnAttente(setN), []);
+  if (!n) return null;
+  return (
+    <View style={{ backgroundColor: GOLD, paddingTop: 44, paddingBottom: 6, paddingHorizontal: 16 }}>
+      <Text style={{ color: NAVY, fontSize: 12, fontWeight: '700', textAlign: 'center' }}>
+        ⏳ {n} élément{n > 1 ? 's' : ''} en attente d'envoi (hors ligne)
+      </Text>
+    </View>
+  );
+}
+
 function Nav({ isAdmin }) {
   const { t } = useApp();
+  // Envoi différé : au démarrage, au retour du réseau, au retour au premier plan et toutes les minutes
+  useEffect(() => {
+    viderFile();
+    const arreterReseau = surChangementReseau((enLigne) => { if (enLigne) viderFile(); });
+    const minuteur = setInterval(viderFile, 60 * 1000);
+    const abonnement = AppState.addEventListener('change', (etat) => { if (etat === 'active') viderFile(); });
+    return () => { arreterReseau(); clearInterval(minuteur); abonnement.remove(); };
+  }, []);
+  // Compteur de relances affiché sur l'onglet : au démarrage, toutes les 5 minutes et au retour au premier plan
+  const [nbRelances, setNbRelances] = useState(0);
+  useEffect(() => {
+    const arreter = surNombreRelances(setNbRelances);
+    rafraichirNombreRelances();
+    const minuteur = setInterval(rafraichirNombreRelances, 5 * 60 * 1000);
+    const abonnement = AppState.addEventListener('change', (etat) => {
+      if (etat === 'active') rafraichirNombreRelances();
+    });
+    return () => { arreter(); clearInterval(minuteur); abonnement.remove(); };
+  }, []);
   return (
+    <View style={{ flex: 1 }}>
+    <BandeauEnvoi />
     <Tab.Navigator screenOptions={({ route }) => ({
       headerShown: false,
       tabBarStyle: { backgroundColor: '#1C1C1E', borderTopColor: GOLD + '50', borderTopWidth: 1, height: 70, paddingBottom: 10, paddingTop: 6 },
@@ -75,8 +113,10 @@ function Nav({ isAdmin }) {
       <Tab.Screen name="Commandes" component={CommandesScreen} options={{ title: t.commandes }} />
       <Tab.Screen name="Scan" component={ScanScreen} options={{ title: t.scan }} />
       <Tab.Screen name="Prospects" component={ProspectsScreen} options={{ title: 'Prospects' }} />
+      <Tab.Screen name="Relances" component={RelancesScreen} options={{ title: 'Relances', tabBarBadge: nbRelances > 0 ? nbRelances : undefined }} />
       {isAdmin ? <Tab.Screen name="Fournisseurs" component={FournisseursScreen} options={{ title: 'Fournisseurs' }} /> : null}
     </Tab.Navigator>
+    </View>
   );
 }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Updates from 'expo-updates';
+import { Ionicons } from '@expo/vector-icons';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, AppState, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -20,7 +21,7 @@ const NAVY = '#1C1C1E';
 const GOLD = '#C8A45A';
 const Tab = createBottomTabNavigator();
 
-const ICONS = { Catalogue: '🍷', Simulateur: '🧮', Clients: '👥', Devis: '📋', Commandes: '📦', Scan: '🔍', Prospects: '🎯', Fournisseurs: '🏭' };
+const ICONS = { Catalogue: 'wine', Simulateur: 'calculator', Clients: 'people', Devis: 'document-text', Commandes: 'cube', Scan: 'scan', Prospects: 'locate', Fournisseurs: 'business' };
 
 function LangSelector() {
   const { lang, setLang } = useApp();
@@ -61,7 +62,7 @@ function Nav({ isAdmin }) {
       tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
       tabBarIcon: ({ color }) => (
         <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontSize: 22 }}>{ICONS[route.name]}</Text>
+          <Ionicons name={ICONS[route.name]} size={24} color={color} />
           {route.name === 'Devis' && <Badge />}
         </View>
       ),

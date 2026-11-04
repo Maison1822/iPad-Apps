@@ -287,7 +287,63 @@ function FicheFournisseur({ selected, etapes, suivi, libelleEtape, onFermer, onS
   );
 }
 
+const NOUVEAU_VIDE={Domaine:'',Pays:'',Adresse:'',Téléphone:'',Email:'','Site web':'',Notes:''};
+const CHAMPS_NOUVEAU=[
+  {cle:'Pays',label:'Pays'},
+  {cle:'Adresse',label:'Adresse',multiline:true},
+  {cle:'Téléphone',label:'Téléphone',clavier:'phone-pad'},
+  {cle:'Email',label:'E-mail',clavier:'email-address'},
+  {cle:'Site web',label:'Site web',clavier:'url'},
+  {cle:'Notes',label:'Notes',multiline:true},
+];
+
+// Création d'un fournisseur : la page producteur Shopify est créée automatiquement côté serveur
+function NouveauFournisseur({ existants, onFermer, onCree }){
+  const [form,setForm]=useState({...NOUVEAU_VIDE});
+  const [saving,setSaving]=useState(false);
+
+  async function creer(){
+    const domaine=vide(form.Domaine);
+    if(!domaine){Alert.alert('Nom requis','Saisissez le nom du domaine / fournisseur.');return;}
+    if(existants.some(f=>(f.Domaine||'').trim().toLowerCase()===domaine.toLowerCase())){
+      Alert.alert('Déjà existant','Un fournisseur porte déjà ce nom.');return;
+    }
+    setSaving(true);
+    const ligne={Domaine:domaine,Actif:true};
+    CHAMPS_NOUVEAU.forEach(c=>{ligne[c.cle]=vide(form[c.cle]);});
+    const {data,error}=await supabase.from('Fournisseurs').insert(ligne).select('*').single();
+    if(error){setSaving(false);Alert.alert('Erreur',error.message);return;}
+    const {data:suivi,error:errSuivi}=await supabase.from('Suivi Fournisseurs')
+      .upsert({fournisseur_id:data.id,etape_code:'nouveau'},{onConflict:'fournisseur_id'}).select('*').single();
+    setSaving(false);
+    if(errSuivi)Alert.alert('Fournisseur créé','Le suivi n\'a pas pu être initialisé : '+errSuivi.message);
+    onCree(data,suivi||null);
+  }
+
+  return(
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onFermer}>
+      <View style={{flex:1,backgroundColor:BG}}>
+        <View style={s.modalHeader}>
+          <Text style={s.modalTitre}>Nouveau fournisseur</Text>
+          <TouchableOpacity onPress={onFermer}><Text style={{color:GOLD,fontSize:15}}>Fermer</Text></TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{padding:20,paddingBottom:80}} keyboardShouldPersistTaps="handled">
+          <Champ label="Domaine / fournisseur *" valeur={form.Domaine} onChange={v=>setForm(p=>({...p,Domaine:v}))}/>
+          {CHAMPS_NOUVEAU.map(c=>(
+            <Champ key={c.cle} label={c.label} valeur={form[c.cle]} clavier={c.clavier} multiline={c.multiline}
+              onChange={v=>setForm(p=>({...p,[c.cle]:v}))}/>
+          ))}
+          <TouchableOpacity style={[s.boutonSave,saving&&{opacity:0.5}]} onPress={creer} disabled={saving}>
+            {saving?<ActivityIndicator color={BG}/>:<Text style={s.boutonSaveTxt}>Créer le fournisseur</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 export default function FournisseursScreen(){
+  const [nouveau,setNouveau]=useState(false);
   const [fournisseurs,setFournisseurs]=useState([]);
   const [suivis,setSuivis]=useState({});
   const [etapes,setEtapes]=useState([]);
@@ -355,9 +411,14 @@ export default function FournisseursScreen(){
 
   return(
     <View style={s.container}>
-      <View style={s.header}>
-        <Text style={s.marque}>MAISON 1822</Text>
-        <Text style={s.titre}>Fournisseurs</Text>
+      <View style={[s.header,{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end'}]}>
+        <View>
+          <Text style={s.marque}>MAISON 1822</Text>
+          <Text style={s.titre}>Fournisseurs</Text>
+        </View>
+        <TouchableOpacity style={{borderWidth:1,borderColor:GOLD,borderRadius:8,paddingHorizontal:14,paddingVertical:8}} onPress={()=>setNouveau(true)}>
+          <Text style={{color:GOLD,fontWeight:'700',fontSize:13}}>+ Nouveau fournisseur</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={{paddingHorizontal:16,paddingVertical:8}}>
@@ -399,6 +460,19 @@ export default function FournisseursScreen(){
           )}
         />
       }
+
+      {nouveau&&(
+        <NouveauFournisseur
+          existants={fournisseurs}
+          onFermer={()=>setNouveau(false)}
+          onCree={(ligne,suivi)=>{
+            setFournisseurs(prev=>[...prev,ligne].sort((a,b)=>(a.Domaine||'').localeCompare(b.Domaine||'')));
+            if(suivi)setSuivis(prev=>({...prev,[ligne.id]:suivi}));
+            setNouveau(false);
+            setSelected(ligne);
+          }}
+        />
+      )}
 
       {selected&&(
         <FicheFournisseur

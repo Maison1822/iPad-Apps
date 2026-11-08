@@ -21,7 +21,7 @@ const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appel
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
 
 // Version affichée à côté du titre : à changer à chaque publication
-const VERSION_APP='v34.3';
+const VERSION_APP='v34.4';
 // Paliers affichés dans l'onglet « Tarifs pro » (au-delà de 150 bouteilles : prix sur demande)
 const PALIERS_AFFICHES=[12,24,48,60,120,150];
 
@@ -161,18 +161,23 @@ export default function CatalogueScreen({navigation}){
         const paliersEurAutorises=(produitId)=>{
           const r=pvcEurMap[produitId];
           if(!r)return[];
-          const base=parseFloat(r['Prix Public TTC'])||0;
+          // Base des paliers : Prix Pro HT x 1,2 (TTC) s'il est saisi, sinon Prix Public TTC
+          const proEur=parseFloat(r['Prix Pro HT'])||0;
+          const plancherEur=parseFloat(r['Prix Plancher HT'])||0;
+          const base=proEur>0?proEur*1.2:(parseFloat(r['Prix Public TTC'])||0);
           const qOk=autorisesEurMap[produitId]||[];
           const out=[];
           for(let i=1;i<=10;i++){
             const qte=r[`Qté Min Palier ${i}`]??defMap[i]?.qte;
             const remise=parseFloat(r[`Remise Palier ${i} (%)`]??defMap[i]?.remise);
-            if(qte==null||isNaN(remise)||!qOk.includes(qte))continue;
+            if(qte==null||isNaN(remise)||!qOk.includes(qte)||qte>150)continue;
+            const prixHt=Math.round(base*(1-remise/100)/1.2*100)/100;
+            if(plancherEur>0&&prixHt<plancherEur)continue;
             out.push({
               qte,
               remise,
               prix_ttc:Math.round(base*(1-remise/100)*100)/100,
-              prix_ht:Math.round(base*(1-remise/100)/1.2*100)/100,
+              prix_ht:prixHt,
             });
           }
           return out;
@@ -183,6 +188,7 @@ export default function CatalogueScreen({navigation}){
             ...v,
             brl_paliers: parsePaliers(v.brl_paliers).filter(p=>qtesOk.includes(p.qte)),
             eur_palier_list: AMERIQUE_SUD.includes(v.pays)?paliersEurAutorises(v.produit_id):[],
+            eur_pro_ht: AMERIQUE_SUD.includes(v.pays)?(parseFloat(pvcEurMap[v.produit_id]?.['Prix Pro HT'])||null):null,
           };
         }).filter(v=>autorisesMap[v.produit_id]||(parseFloat(v.brl_public_ttc)>0));
         setVins(filtered);
@@ -471,13 +477,16 @@ export default function CatalogueScreen({navigation}){
         // Fonts : Jost (textes) et Barlow Condensed (chiffres) ; police système tant qu'elles ne sont pas chargées
         const fT=policesOk?'Jost_400Regular':undefined, fTm=policesOk?'Jost_500Medium':undefined;
         const fN=policesOk?'BarlowCondensed_600SemiBold':undefined;
-        const fmt0=x=>'R$ '+Math.round(x).toLocaleString('pt-BR');
-        // Prix Pro (ICMS inclus) = Pro HT ÷ (1 − ICMS) ; repli sur le Prix Public TTC quand le Pro HT n'est pas saisi
-        const icms=parseFloat(item.brl_icms)||0.17;
-        const proHt=parseFloat(item.pro_ht_brl)||0;
-        const aPro=proHt>0;
+        const dev=item._dev;
+        const fmt0=x=>dev+' '+Math.round(x).toLocaleString('pt-BR');
         const pub=parseFloat(item._px)||0;
-        const proAff=aPro?proHt/(1-icms):pub;
+        // R$ : Prix Pro (ICMS inclus) = Pro HT ÷ (1 − ICMS) ; repli sur le Prix Public TTC quand le Pro HT n'est pas saisi
+        // € : Prix Pro HT tel que saisi (fourchettes calculées TVA 20 % incluse) ; repli sur le Prix Public HT
+        const icms=parseFloat(item.brl_icms)||0.17;
+        const proHt=parseFloat(brl?item.pro_ht_brl:item.eur_pro_ht)||0;
+        const aPro=proHt>0;
+        const proAff=aPro?(brl?proHt/(1-icms):proHt):(brl?pub:(parseFloat(item._ht)||pub));
+        const proBase=brl?proAff:proAff*1.2; // base des fourchettes
         const pal=paliers.filter(p=>PALIERS_AFFICHES.includes(p.qte));
         const blocRendu=(renduPour&&renduPour.id===item.produit_id&&renduPour.data)?(
           <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginTop:16,borderWidth:1,borderColor:BORDER}}>
@@ -503,46 +512,18 @@ export default function CatalogueScreen({navigation}){
           </View>
         ):null;
 
-        if(!brl){
-          // Catalogue en € : affichage inchangé
-          return(<ScrollView contentContainerStyle={{padding:20}}>
-            <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginBottom:16,borderWidth:1,borderColor:BORDER}}>
-              <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Prix public TTC</Text>
-              <Text style={{color:WHITE,fontSize:22,fontWeight:'300',textDecorationLine:'line-through'}}>{item._dev} {fmt(item._px)}</Text>
-              <Text style={{color:MUTED,fontSize:12,marginTop:2}}>HT : {item._dev} {fmt(item._ht)}</Text>
-            </View>
-            {paliers.length>0&&(
-              <View style={{backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
-                <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Tarifs professionnels TTC</Text>
-                <View style={{flexDirection:'row',marginBottom:8}}>
-                  {['Qté min.','Remise','HT','TTC'].map((h,i)=><Text key={i} style={{color:MUTED,fontSize:11,flex:i>1?1.5:1,textAlign:i>0?'right':'left'}}>{h}</Text>)}
-                </View>
-                {paliers.map((p,i)=>(
-                  <View key={i} style={{flexDirection:'row',paddingVertical:8,borderTopWidth:1,borderTopColor:BORDER}}>
-                    <Text style={{color:WHITE,fontSize:14,flex:1}}>{p.qte} bts</Text>
-                    <Text style={{color:GOLD,fontSize:14,flex:1,textAlign:'right',fontWeight:'600'}}>-{p.remise}%</Text>
-                    <Text style={{color:WHITE,fontSize:14,flex:1.5,textAlign:'right'}}>{item._dev} {fmt(p.prix_ht)}</Text>
-                    <Text style={{color:GOLD,fontSize:15,flex:1.5,textAlign:'right',fontWeight:'700'}}>{item._dev} {fmt(p.prix_ttc)}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            {blocRendu}
-          </ScrollView>);
-        }
-
-        // Catalogue en R$ : nouveau modèle de prix (Cavistes / CHR)
+        // Nouveau modèle de prix (Cavistes / CHR), en R$ comme en €
         const chr=canalPrix==='chr';
         let titreBloc,valeurBloc;
         if(!chr){
           // Cavistes : minimum = Prix Public TTC conseillé ; maximum = 2,5 × Prix Pro (ICMS inclus)
           titreBloc=T('Prix conseillé TTC','Preço sugerido c/ impostos');
-          const min=Math.round(pub), max=aPro?Math.round(2.5*proAff):null;
+          const min=Math.round(pub), max=aPro?Math.round(2.5*proBase):null;
           valeurBloc=(max!=null&&max>min)?`${fmt0(min)} – ${fmt0(max)}`:fmt0(min);
         }else{
           // CHR : de 2,5 × à 3,5 × le Prix Pro (ICMS inclus) ; sans Prix Pro saisi, pas de fourchette
           titreBloc=T('Prix sur table','Preço na mesa');
-          valeurBloc=aPro?`${fmt0(2.5*proAff)} – ${fmt0(3.5*proAff)}`:T('Nous consulter','Sob consulta');
+          valeurBloc=aPro?`${fmt0(2.5*proBase)} – ${fmt0(3.5*proBase)}`:T('Nous consulter','Sob consulta');
         }
         return(<ScrollView contentContainerStyle={{padding:20}}>
           <View style={{flexDirection:'row',gap:8,marginBottom:16}}>
@@ -565,7 +546,7 @@ export default function CatalogueScreen({navigation}){
               </View>
               <View style={{flex:1,backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
                 <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:fT}}>{T('Prix pro HT*','Preço pro HT*')}</Text>
-                <Text style={{color:GOLD,fontSize:26,fontFamily:fN,fontWeight:policesOk?undefined:'600'}}>R$ {fmt(proAff)}</Text>
+                <Text style={{color:GOLD,fontSize:26,fontFamily:fN,fontWeight:policesOk?undefined:'600'}}>{dev} {fmt(proAff)}</Text>
               </View>
             </View>
             <Text style={{color:MUTED,fontSize:11,marginTop:8,marginBottom:16,fontFamily:fT}}>{T('* Prix pro dégressif selon la quantité commandée','* Preço pro degressivo conforme a quantidade pedida')}</Text>
@@ -578,8 +559,8 @@ export default function CatalogueScreen({navigation}){
                 <View key={i} style={{flexDirection:'row',paddingVertical:8,borderTopWidth:1,borderTopColor:BORDER,alignItems:'baseline'}}>
                   <Text style={{color:WHITE,fontSize:17,flex:1,fontFamily:fN}}>{p.qte} {T('bts','gfs')}</Text>
                   <Text style={{color:GOLD,fontSize:17,flex:1,textAlign:'right',fontFamily:fN}}>-{p.remise}%</Text>
-                  <Text style={{color:WHITE,fontSize:17,flex:1.5,textAlign:'right',fontFamily:fN}}>R$ {fmt(p.prix_ht)}</Text>
-                  <Text style={{color:GOLD,fontSize:18,flex:1.5,textAlign:'right',fontFamily:fN}}>R$ {fmt(p.prix_ttc)}</Text>
+                  <Text style={{color:brl?WHITE:GOLD,fontSize:brl?17:18,flex:1.5,textAlign:'right',fontFamily:fN}}>{dev} {fmt(p.prix_ht)}</Text>
+                  <Text style={{color:brl?GOLD:WHITE,fontSize:brl?18:17,flex:1.5,textAlign:'right',fontFamily:fN}}>{dev} {fmt(p.prix_ttc)}</Text>
                 </View>
               ))}
               <Text style={{color:MUTED,fontSize:11,marginTop:10,fontFamily:fT}}>{T('Pour toute quantité supérieure à 150 bouteilles : prix sur demande','Para quantidades acima de 150 garrafas: preço sob consulta')}</Text>

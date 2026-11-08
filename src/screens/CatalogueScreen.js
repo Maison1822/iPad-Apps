@@ -21,7 +21,7 @@ const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appel
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
 
 // Version affichée à côté du titre : à changer à chaque publication
-const VERSION_APP='v34.4';
+const VERSION_APP='v34.5';
 // Paliers affichés dans l'onglet « Tarifs pro » (au-delà de 150 bouteilles : prix sur demande)
 const PALIERS_AFFICHES=[12,24,48,60,120,150];
 
@@ -481,12 +481,12 @@ export default function CatalogueScreen({navigation}){
         const fmt0=x=>dev+' '+Math.round(x).toLocaleString('pt-BR');
         const pub=parseFloat(item._px)||0;
         // R$ : Prix Pro (ICMS inclus) = Pro HT ÷ (1 − ICMS) ; repli sur le Prix Public TTC quand le Pro HT n'est pas saisi
-        // € : Prix Pro HT tel que saisi (fourchettes calculées TVA 20 % incluse) ; repli sur le Prix Public HT
+        // € : Prix Pro HT tel que saisi, hors TVA ; repli sur le Prix Public HT
         const icms=parseFloat(item.brl_icms)||0.17;
         const proHt=parseFloat(brl?item.pro_ht_brl:item.eur_pro_ht)||0;
         const aPro=proHt>0;
         const proAff=aPro?(brl?proHt/(1-icms):proHt):(brl?pub:(parseFloat(item._ht)||pub));
-        const proBase=brl?proAff:proAff*1.2; // base des fourchettes
+        const proBase=proAff; // base des fourchettes : Prix Pro HT (R$ : ICMS inclus ; € : hors TVA)
         const pal=paliers.filter(p=>PALIERS_AFFICHES.includes(p.qte));
         const blocRendu=(renduPour&&renduPour.id===item.produit_id&&renduPour.data)?(
           <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginTop:16,borderWidth:1,borderColor:BORDER}}>

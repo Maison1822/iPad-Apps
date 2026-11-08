@@ -7,6 +7,10 @@ import { supabase } from '../lib/supabase';
 import { ImageLocale, lireCatalogue, sauverCatalogue, prechargerPhotos, surChangementReseau } from '../lib/offline';
 import { useApp } from '../lib/AppContext';
 import * as Updates from 'expo-updates';
+import { useFonts } from 'expo-font';
+import { Jost_400Regular } from '@expo-google-fonts/jost/400Regular';
+import { Jost_500Medium } from '@expo-google-fonts/jost/500Medium';
+import { BarlowCondensed_600SemiBold } from '@expo-google-fonts/barlow-condensed/600SemiBold';
 
 const BG='#1C1C1E',CARD='#2C2C2E',NAVY='#0F1E3C',GOLD='#C8A45A',WHITE='#FFFFFF',MUTED='#8E8E93',BORDER='#3A3A3C',SUCCESS='#2D7A4F';
 const COULEURS=['Tous','Rouge','Blanc','Rosé','Ambré'];
@@ -15,6 +19,11 @@ const AMERIQUE_SUD=['Brésil','Argentine','Chili'];
 const DOT_CLR={Rouge:'#8B1A2E',Blanc:'#C9B458','Rosé':'#D98A9A','Ambré':'#C8821A'};
 const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appellation',label:'Appellation'},{id:'couleur',label:'Couleur'},{id:'collection',label:'Collection'},{id:'certif',label:'Certification'},{id:'coup_coeur',label:'Coup de Cœur'},{id:'club1822',label:'Club 1822'}];
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
+
+// Version affichée à côté du titre : à changer à chaque publication
+const VERSION_APP='v34.3';
+// Paliers affichés dans l'onglet « Tarifs pro » (au-delà de 150 bouteilles : prix sur demande)
+const PALIERS_AFFICHES=[12,24,48,60,120,150];
 
 const COLLECTIONS_ORDER=['Les Essentiels','Les Sélections','Gastronomie','Collection 1822','Héritage 1822','Editions Limitées'];
 
@@ -68,6 +77,8 @@ export default function CatalogueScreen({navigation}){
   const [selCoupCoeur,setSelCoupCoeur]=useState(false);
   const [selClub1822,setSelClub1822]=useState(false);
   const [triPrix,setTriPrix]=useState(null); // null | 'asc' | 'desc'
+  const [canalPrix,setCanalPrix]=useState('cav'); // onglet Tarifs pro : 'cav' (Cavistes) | 'chr' (CHR)
+  const [policesOk]=useFonts({Jost_400Regular,Jost_500Medium,BarlowCondensed_600SemiBold});
   const [cepagesMap,setCepagesMap]=useState({});
   // Prix rendu (admin uniquement) : { id, data } ; data reste null pour un non-admin (la fonction SQL renvoie null)
   const [renduPour,setRenduPour]=useState(null);
@@ -118,7 +129,7 @@ export default function CatalogueScreen({navigation}){
     };
     try{
       const{data,error}=await supabase.from('Catalogue App')
-        .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,eur_public_ttc,eur_public_ht,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise')
+        .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,eur_public_ttc,eur_public_ht,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise,pro_ht_brl,plancher_ht_brl,brl_icms')
         .order('producteur').limit(1000);
       if(error)echec(error);
       else if(data){
@@ -454,51 +465,127 @@ export default function CatalogueScreen({navigation}){
       }
       if(onglet==='accords'){const txt=item[`accords_${L}`];return(<ScrollView contentContainerStyle={{padding:20}}>{txt?<Text style={{color:WHITE,fontSize:14,lineHeight:22}}>{txt}</Text>:<Text style={{color:MUTED,fontStyle:'italic'}}>Non renseigné</Text>}</ScrollView>);}
       if(onglet==='prix'){
-        return(<ScrollView contentContainerStyle={{padding:20}}>
-          <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginBottom:16,borderWidth:1,borderColor:BORDER}}>
-            <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Prix public TTC</Text>
-            <Text style={{color:WHITE,fontSize:22,fontWeight:'300',textDecorationLine:'line-through'}}>{item._dev} {fmt(item._px)}</Text>
-            <Text style={{color:MUTED,fontSize:12,marginTop:2}}>HT : {item._dev} {fmt(item._ht)}</Text>
-          </View>
-          {paliers.length>0&&(
-            <View style={{backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
-              <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Tarifs professionnels TTC</Text>
-              <View style={{flexDirection:'row',marginBottom:8}}>
-                {['Qté min.','Remise','HT','TTC'].map((h,i)=><Text key={i} style={{color:MUTED,fontSize:11,flex:i>1?1.5:1,textAlign:i>0?'right':'left'}}>{h}</Text>)}
+        const brl=item._dev==='R$';
+        const pt=lang==='PT';
+        const T=(fr,ptx)=>pt?ptx:fr;
+        // Fonts : Jost (textes) et Barlow Condensed (chiffres) ; police système tant qu'elles ne sont pas chargées
+        const fT=policesOk?'Jost_400Regular':undefined, fTm=policesOk?'Jost_500Medium':undefined;
+        const fN=policesOk?'BarlowCondensed_600SemiBold':undefined;
+        const fmt0=x=>'R$ '+Math.round(x).toLocaleString('pt-BR');
+        // Prix Pro (ICMS inclus) = Pro HT ÷ (1 − ICMS) ; repli sur le Prix Public TTC quand le Pro HT n'est pas saisi
+        const icms=parseFloat(item.brl_icms)||0.17;
+        const proHt=parseFloat(item.pro_ht_brl)||0;
+        const aPro=proHt>0;
+        const pub=parseFloat(item._px)||0;
+        const proAff=aPro?proHt/(1-icms):pub;
+        const pal=paliers.filter(p=>PALIERS_AFFICHES.includes(p.qte));
+        const blocRendu=(renduPour&&renduPour.id===item.produit_id&&renduPour.data)?(
+          <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginTop:16,borderWidth:1,borderColor:BORDER}}>
+            <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Prix rendu (admin)</Text>
+            {renduPour.data.revient_eur_ht!=null&&(
+              <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:6}}>
+                <Text style={{color:MUTED,fontSize:13}}>Revient France HT</Text>
+                <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>€ {fmt(renduPour.data.revient_eur_ht)}</Text>
               </View>
-              {paliers.map((p,i)=>(
-                <View key={i} style={{flexDirection:'row',paddingVertical:8,borderTopWidth:1,borderTopColor:BORDER}}>
-                  <Text style={{color:WHITE,fontSize:14,flex:1}}>{p.qte} bts</Text>
-                  <Text style={{color:GOLD,fontSize:14,flex:1,textAlign:'right',fontWeight:'600'}}>-{p.remise}%</Text>
-                  <Text style={{color:WHITE,fontSize:14,flex:1.5,textAlign:'right'}}>{item._dev} {fmt(p.prix_ht)}</Text>
-                  <Text style={{color:GOLD,fontSize:15,flex:1.5,textAlign:'right',fontWeight:'700'}}>{item._dev} {fmt(p.prix_ttc)}</Text>
+            )}
+            {renduPour.data.rendu_brl_ht!=null&&(
+              <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:6}}>
+                <Text style={{color:MUTED,fontSize:13}}>Rendu Brésil HT</Text>
+                <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>R$ {fmt(renduPour.data.rendu_brl_ht)}</Text>
+              </View>
+            )}
+            {renduPour.data.rendu_brl_ttc!=null&&(
+              <View style={{flexDirection:'row',justifyContent:'space-between'}}>
+                <Text style={{color:MUTED,fontSize:13}}>Rendu Brésil TTC</Text>
+                <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>R$ {fmt(renduPour.data.rendu_brl_ttc)}</Text>
+              </View>
+            )}
+          </View>
+        ):null;
+
+        if(!brl){
+          // Catalogue en € : affichage inchangé
+          return(<ScrollView contentContainerStyle={{padding:20}}>
+            <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginBottom:16,borderWidth:1,borderColor:BORDER}}>
+              <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Prix public TTC</Text>
+              <Text style={{color:WHITE,fontSize:22,fontWeight:'300',textDecorationLine:'line-through'}}>{item._dev} {fmt(item._px)}</Text>
+              <Text style={{color:MUTED,fontSize:12,marginTop:2}}>HT : {item._dev} {fmt(item._ht)}</Text>
+            </View>
+            {paliers.length>0&&(
+              <View style={{backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
+                <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Tarifs professionnels TTC</Text>
+                <View style={{flexDirection:'row',marginBottom:8}}>
+                  {['Qté min.','Remise','HT','TTC'].map((h,i)=><Text key={i} style={{color:MUTED,fontSize:11,flex:i>1?1.5:1,textAlign:i>0?'right':'left'}}>{h}</Text>)}
+                </View>
+                {paliers.map((p,i)=>(
+                  <View key={i} style={{flexDirection:'row',paddingVertical:8,borderTopWidth:1,borderTopColor:BORDER}}>
+                    <Text style={{color:WHITE,fontSize:14,flex:1}}>{p.qte} bts</Text>
+                    <Text style={{color:GOLD,fontSize:14,flex:1,textAlign:'right',fontWeight:'600'}}>-{p.remise}%</Text>
+                    <Text style={{color:WHITE,fontSize:14,flex:1.5,textAlign:'right'}}>{item._dev} {fmt(p.prix_ht)}</Text>
+                    <Text style={{color:GOLD,fontSize:15,flex:1.5,textAlign:'right',fontWeight:'700'}}>{item._dev} {fmt(p.prix_ttc)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {blocRendu}
+          </ScrollView>);
+        }
+
+        // Catalogue en R$ : nouveau modèle de prix (Cavistes / CHR)
+        const chr=canalPrix==='chr';
+        let titreBloc,valeurBloc;
+        if(!chr){
+          // Cavistes : minimum = Prix Public TTC conseillé ; maximum = 2,5 × Prix Pro (ICMS inclus)
+          titreBloc=T('Prix conseillé TTC','Preço sugerido c/ impostos');
+          const min=Math.round(pub), max=aPro?Math.round(2.5*proAff):null;
+          valeurBloc=(max!=null&&max>min)?`${fmt0(min)} – ${fmt0(max)}`:fmt0(min);
+        }else{
+          // CHR : de 2,5 × à 3,5 × le Prix Pro (ICMS inclus) ; sans Prix Pro saisi, pas de fourchette
+          titreBloc=T('Prix sur table','Preço na mesa');
+          valeurBloc=aPro?`${fmt0(2.5*proAff)} – ${fmt0(3.5*proAff)}`:T('Nous consulter','Sob consulta');
+        }
+        return(<ScrollView contentContainerStyle={{padding:20}}>
+          <View style={{flexDirection:'row',gap:8,marginBottom:16}}>
+            {[['cav','Cavistes'],['chr','CHR']].map(([id,lib])=>(
+              <TouchableOpacity key={id} onPress={()=>setCanalPrix(id)}
+                style={{paddingHorizontal:18,paddingVertical:8,borderRadius:16,borderWidth:1,borderColor:canalPrix===id?GOLD:BORDER,backgroundColor:canalPrix===id?GOLD:CARD}}>
+                <Text style={{color:canalPrix===id?BG:WHITE,fontSize:13,fontFamily:fTm,fontWeight:policesOk?undefined:'700'}}>{lib}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {pal.length===0?(
+            <View style={{backgroundColor:CARD,borderRadius:10,padding:18,borderWidth:1,borderColor:BORDER}}>
+              <Text style={{color:MUTED,fontSize:16,fontStyle:'italic',fontFamily:fT}}>{T('Nous consulter','Sob consulta')}</Text>
+            </View>
+          ):(<>
+            <View style={{flexDirection:'row',gap:12}}>
+              <View style={{flex:1.6,backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:BORDER}}>
+                <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:fT}}>{titreBloc}</Text>
+                <Text style={{color:WHITE,fontSize:26,fontFamily:fN,fontWeight:policesOk?undefined:'600'}}>{valeurBloc}</Text>
+              </View>
+              <View style={{flex:1,backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
+                <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:fT}}>{T('Prix pro HT*','Preço pro HT*')}</Text>
+                <Text style={{color:GOLD,fontSize:26,fontFamily:fN,fontWeight:policesOk?undefined:'600'}}>R$ {fmt(proAff)}</Text>
+              </View>
+            </View>
+            <Text style={{color:MUTED,fontSize:11,marginTop:8,marginBottom:16,fontFamily:fT}}>{T('* Prix pro dégressif selon la quantité commandée','* Preço pro degressivo conforme a quantidade pedida')}</Text>
+            <View style={{backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
+              <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:12,fontFamily:fT}}>{T('Tarifs professionnels TTC','Tarifas profissionais c/ impostos')}</Text>
+              <View style={{flexDirection:'row',marginBottom:8}}>
+                {[T('Qté min.','Qtd mín.'),T('Remise','Desconto'),'HT','TTC'].map((h,i)=><Text key={i} style={{color:MUTED,fontSize:11,fontFamily:fT,flex:i>1?1.5:1,textAlign:i>0?'right':'left'}}>{h}</Text>)}
+              </View>
+              {pal.map((p,i)=>(
+                <View key={i} style={{flexDirection:'row',paddingVertical:8,borderTopWidth:1,borderTopColor:BORDER,alignItems:'baseline'}}>
+                  <Text style={{color:WHITE,fontSize:17,flex:1,fontFamily:fN}}>{p.qte} {T('bts','gfs')}</Text>
+                  <Text style={{color:GOLD,fontSize:17,flex:1,textAlign:'right',fontFamily:fN}}>-{p.remise}%</Text>
+                  <Text style={{color:WHITE,fontSize:17,flex:1.5,textAlign:'right',fontFamily:fN}}>R$ {fmt(p.prix_ht)}</Text>
+                  <Text style={{color:GOLD,fontSize:18,flex:1.5,textAlign:'right',fontFamily:fN}}>R$ {fmt(p.prix_ttc)}</Text>
                 </View>
               ))}
+              <Text style={{color:MUTED,fontSize:11,marginTop:10,fontFamily:fT}}>{T('Pour toute quantité supérieure à 150 bouteilles : prix sur demande','Para quantidades acima de 150 garrafas: preço sob consulta')}</Text>
             </View>
-          )}
-          {renduPour&&renduPour.id===item.produit_id&&renduPour.data&&(
-            <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginTop:16,borderWidth:1,borderColor:BORDER}}>
-              <Text style={{color:MUTED,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Prix rendu (admin)</Text>
-              {renduPour.data.revient_eur_ht!=null&&(
-                <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:6}}>
-                  <Text style={{color:MUTED,fontSize:13}}>Revient France HT</Text>
-                  <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>€ {fmt(renduPour.data.revient_eur_ht)}</Text>
-                </View>
-              )}
-              {renduPour.data.rendu_brl_ht!=null&&(
-                <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:6}}>
-                  <Text style={{color:MUTED,fontSize:13}}>Rendu Brésil HT</Text>
-                  <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>R$ {fmt(renduPour.data.rendu_brl_ht)}</Text>
-                </View>
-              )}
-              {renduPour.data.rendu_brl_ttc!=null&&(
-                <View style={{flexDirection:'row',justifyContent:'space-between'}}>
-                  <Text style={{color:MUTED,fontSize:13}}>Rendu Brésil TTC</Text>
-                  <Text style={{color:WHITE,fontSize:14,fontWeight:'600'}}>R$ {fmt(renduPour.data.rendu_brl_ttc)}</Text>
-                </View>
-              )}
-            </View>
-          )}
+          </>)}
+          {blocRendu}
         </ScrollView>);
       }
       return null;
@@ -561,7 +648,7 @@ export default function CatalogueScreen({navigation}){
           <Text style={s.marque}>MAISON 1822</Text>
           <View style={{flexDirection:'row',alignItems:'baseline',gap:8}}>
             <Text style={s.titre}>{t.catalogue}</Text>
-            <Text style={{color:WHITE,fontSize:10,opacity:0.4}}>{Updates.updateId?Updates.updateId.substring(0,8):'v34'}</Text>
+            <Text style={{color:WHITE,fontSize:10,opacity:0.4}}>{VERSION_APP}{Updates.updateId?` · ${Updates.updateId.substring(0,8)}`:''}</Text>
           </View>
         </View>
         <TouchableOpacity style={s.toggleBtn} onPress={()=>navigation.navigate('Simulateur')}>

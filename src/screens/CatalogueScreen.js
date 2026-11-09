@@ -21,7 +21,7 @@ const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appel
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
 
 // Version affichée à côté du titre : à changer à chaque publication
-const VERSION_APP='v34.5';
+const VERSION_APP='v34.6';
 // Paliers affichés dans l'onglet « Tarifs pro » (au-delà de 150 bouteilles : prix sur demande)
 const PALIERS_AFFICHES=[12,24,48,60,120,150];
 
@@ -129,7 +129,7 @@ export default function CatalogueScreen({navigation}){
     };
     try{
       const{data,error}=await supabase.from('Catalogue App')
-        .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,eur_public_ttc,eur_public_ht,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise,pro_ht_brl,plancher_ht_brl,brl_icms')
+        .select('produit_id,producteur,nom,cuvee,millesime,couleur,region,pays,appellation,collections,domaine,brl_public_ttc,brl_public_ht,brl_paliers,eur_public_ttc,eur_public_ht,vignette_url,photo_url,ncm,desc_courte_fr,desc_courte_pt,desc_courte_en,desc_longue_fr,desc_longue_pt,desc_longue_en,nez_fr,nez_pt,nez_en,bouche_fr,bouche_pt,bouche_en,finale_fr,finale_pt,finale_en,accords_fr,accords_pt,accords_en,vinif_fr,vinif_pt,vinif_en,contenance_ml,alcool,bouteilles_par_carton,allergenes_fr,mention_fr,bio,biodynamie,vegan,hve,coup_de_coeur,club_1822,note_acidite,note_tanins,note_sucrosite,note_volume,note_fraicheur,note_gourmandise,pro_ht_brl,plancher_ht_brl,brl_icms,spiritueux')
         .order('producteur').limit(1000);
       if(error)echec(error);
       else if(data){
@@ -514,16 +514,20 @@ export default function CatalogueScreen({navigation}){
 
         // Nouveau modèle de prix (Cavistes / CHR), en R$ comme en €
         const chr=canalPrix==='chr';
+        // Coefficients (min – max) : vins/champagnes vs spiritueux
+        const coef=item.spiritueux?{cav:[1.5,2.0],chr:[2.0,3.0]}:{cav:[2.0,2.5],chr:[2.5,3.5]};
         let titreBloc,valeurBloc;
         if(!chr){
-          // Cavistes : minimum = Prix Public TTC conseillé ; maximum = 2,5 × Prix Pro (ICMS inclus)
+          // Cavistes : de coefMin × à coefMax × le Prix Pro ; sans Prix Pro saisi, repli sur le Prix Public TTC (minimum seul)
           titreBloc=T('Prix conseillé TTC','Preço sugerido c/ impostos');
-          const min=Math.round(pub), max=aPro?Math.round(2.5*proBase):null;
-          valeurBloc=(max!=null&&max>min)?`${fmt0(min)} – ${fmt0(max)}`:fmt0(min);
+          if(aPro){
+            const mn=Math.round(coef.cav[0]*proBase), mx=Math.round(coef.cav[1]*proBase);
+            valeurBloc=mx>mn?`${fmt0(mn)} – ${fmt0(mx)}`:fmt0(mn);
+          }else valeurBloc=fmt0(Math.round(pub));
         }else{
-          // CHR : de 2,5 × à 3,5 × le Prix Pro (ICMS inclus) ; sans Prix Pro saisi, pas de fourchette
+          // CHR : de coefMin × à coefMax × le Prix Pro ; sans Prix Pro saisi, pas de fourchette
           titreBloc=T('Prix sur table','Preço na mesa');
-          valeurBloc=aPro?`${fmt0(2.5*proBase)} – ${fmt0(3.5*proBase)}`:T('Nous consulter','Sob consulta');
+          valeurBloc=aPro?`${fmt0(coef.chr[0]*proBase)} – ${fmt0(coef.chr[1]*proBase)}`:T('Nous consulter','Sob consulta');
         }
         return(<ScrollView contentContainerStyle={{padding:20}}>
           <View style={{flexDirection:'row',gap:8,marginBottom:16}}>

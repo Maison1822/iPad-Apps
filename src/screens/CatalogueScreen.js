@@ -21,7 +21,7 @@ const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appel
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
 
 // Version affichée à côté du titre : à changer à chaque publication
-const VERSION_APP='v34.6';
+const VERSION_APP='v34.7';
 // Paliers affichés dans l'onglet « Tarifs pro » (au-delà de 150 bouteilles : prix sur demande)
 const PALIERS_AFFICHES=[12,24,48,60,120,150];
 
@@ -158,6 +158,13 @@ export default function CatalogueScreen({navigation}){
           if(errDefs)throw errDefs;
           if(defs)defs.forEach(d=>{defMap[d.palier]={qte:d['Qté Min'],remise:d['Remise (%)']};});
         }
+        // Coefficients des fourchettes de prix conseillés : table "Coefficients Canaux" (aucune valeur en dur)
+        const coefsCanaux={};
+        {
+          const{data:cc,error:errCc}=await supabase.from('Coefficients Canaux').select('code,"Vin Min","Vin Max","Spiritueux Min","Spiritueux Max"').in('code',['CAVISTE','CHR']);
+          if(errCc)throw errCc;
+          if(cc)cc.forEach(c=>{coefsCanaux[c.code]={vin:[parseFloat(c['Vin Min']),parseFloat(c['Vin Max'])],spi:[parseFloat(c['Spiritueux Min']),parseFloat(c['Spiritueux Max'])]};});
+        }
         const paliersEurAutorises=(produitId)=>{
           const r=pvcEurMap[produitId];
           if(!r)return[];
@@ -183,10 +190,10 @@ export default function CatalogueScreen({navigation}){
           return out;
         };
         const filtered=data.map(v=>{
-          const qtesOk=autorisesMap[v.produit_id]||[];
           return {
             ...v,
-            brl_paliers: parsePaliers(v.brl_paliers).filter(p=>qtesOk.includes(p.qte)),
+            brl_paliers: parsePaliers(v.brl_paliers), // déjà calculés et filtrés (marge) côté base
+            coefs_canaux: coefsCanaux,
             eur_palier_list: AMERIQUE_SUD.includes(v.pays)?paliersEurAutorises(v.produit_id):[],
             eur_pro_ht: AMERIQUE_SUD.includes(v.pays)?(parseFloat(pvcEurMap[v.produit_id]?.['Prix Pro HT'])||null):null,
           };
@@ -480,13 +487,12 @@ export default function CatalogueScreen({navigation}){
         const dev=item._dev;
         const fmt0=x=>dev+' '+Math.round(x).toLocaleString('pt-BR');
         const pub=parseFloat(item._px)||0;
-        // R$ : Prix Pro (ICMS inclus) = Pro HT ÷ (1 − ICMS) ; repli sur le Prix Public TTC quand le Pro HT n'est pas saisi
+        // R$ : pro_ht_brl contient déjà le Prix Pro TTC (ICMS inclus), à afficher tel quel ; repli sur le Prix Public TTC quand il n'est pas saisi
         // € : Prix Pro HT tel que saisi, hors TVA ; repli sur le Prix Public HT
-        const icms=parseFloat(item.brl_icms)||0.17;
         const proHt=parseFloat(brl?item.pro_ht_brl:item.eur_pro_ht)||0;
         const aPro=proHt>0;
-        const proAff=aPro?(brl?proHt/(1-icms):proHt):(brl?pub:(parseFloat(item._ht)||pub));
-        const proBase=proAff; // base des fourchettes : Prix Pro HT (R$ : ICMS inclus ; € : hors TVA)
+        const proAff=aPro?proHt:(brl?pub:(parseFloat(item._ht)||pub));
+        const proBase=proAff; // base des fourchettes : Prix Pro HT (R$ : ICMS inclus, tel que saisi en base ; € : hors TVA)
         const pal=paliers.filter(p=>PALIERS_AFFICHES.includes(p.qte));
         const blocRendu=(renduPour&&renduPour.id===item.produit_id&&renduPour.data)?(
           <View style={{backgroundColor:CARD,borderRadius:10,padding:14,marginTop:16,borderWidth:1,borderColor:BORDER}}>
@@ -514,20 +520,23 @@ export default function CatalogueScreen({navigation}){
 
         // Nouveau modèle de prix (Cavistes / CHR), en R$ comme en €
         const chr=canalPrix==='chr';
-        // Coefficients (min – max) : vins/champagnes vs spiritueux
-        const coef=item.spiritueux?{cav:[1.5,2.0],chr:[2.0,3.0]}:{cav:[2.0,2.5],chr:[2.5,3.5]};
+        // Coefficients (min – max) lus dans "Coefficients Canaux" : vins/champagnes vs spiritueux
+        const cx=item.coefs_canaux||{};
+        const pick=c=>c?(item.spiritueux?c.spi:c.vin):null;
+        const coef={cav:pick(cx.CAVISTE),chr:pick(cx.CHR)};
+        const coefOk=c=>Array.isArray(c)&&c.length===2&&c[0]>0&&c[1]>0;
         let titreBloc,valeurBloc;
         if(!chr){
           // Cavistes : de coefMin × à coefMax × le Prix Pro ; sans Prix Pro saisi, repli sur le Prix Public TTC (minimum seul)
           titreBloc=T('Prix conseillé TTC','Preço sugerido c/ impostos');
-          if(aPro){
+          if(aPro&&coefOk(coef.cav)){
             const mn=Math.round(coef.cav[0]*proBase), mx=Math.round(coef.cav[1]*proBase);
             valeurBloc=mx>mn?`${fmt0(mn)} – ${fmt0(mx)}`:fmt0(mn);
           }else valeurBloc=fmt0(Math.round(pub));
         }else{
           // CHR : de coefMin × à coefMax × le Prix Pro ; sans Prix Pro saisi, pas de fourchette
           titreBloc=T('Prix sur table','Preço na mesa');
-          valeurBloc=aPro?`${fmt0(coef.chr[0]*proBase)} – ${fmt0(coef.chr[1]*proBase)}`:T('Nous consulter','Sob consulta');
+          valeurBloc=(aPro&&coefOk(coef.chr))?`${fmt0(coef.chr[0]*proBase)} – ${fmt0(coef.chr[1]*proBase)}`:T('Nous consulter','Sob consulta');
         }
         return(<ScrollView contentContainerStyle={{padding:20}}>
           <View style={{flexDirection:'row',gap:8,marginBottom:16}}>
@@ -549,7 +558,7 @@ export default function CatalogueScreen({navigation}){
                 <Text style={{color:WHITE,fontSize:26,fontFamily:fN,fontWeight:policesOk?undefined:'600'}}>{valeurBloc}</Text>
               </View>
               <View style={{flex:1,backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
-                <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:fT}}>{T('Prix pro HT*','Preço pro HT*')}</Text>
+                <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:6,fontFamily:fT}}>{brl?T('Prix Pro (ICMS inclus)*','Preço Pro (ICMS incluído)*'):T('Prix pro HT*','Preço pro HT*')}</Text>
                 <Text style={{color:GOLD,fontSize:26,fontFamily:fN,fontWeight:policesOk?undefined:'600'}}>{dev} {fmt(proAff)}</Text>
               </View>
             </View>
@@ -557,13 +566,13 @@ export default function CatalogueScreen({navigation}){
             <View style={{backgroundColor:CARD,borderRadius:10,padding:14,borderWidth:1,borderColor:GOLD+'60'}}>
               <Text style={{color:GOLD,fontSize:11,textTransform:'uppercase',letterSpacing:1,marginBottom:12,fontFamily:fT}}>{T('Tarifs professionnels TTC','Tarifas profissionais c/ impostos')}</Text>
               <View style={{flexDirection:'row',marginBottom:8}}>
-                {[T('Qté min.','Qtd mín.'),T('Remise','Desconto'),'HT','TTC'].map((h,i)=><Text key={i} style={{color:MUTED,fontSize:11,fontFamily:fT,flex:i>1?1.5:1,textAlign:i>0?'right':'left'}}>{h}</Text>)}
+                {(brl?[T('Qté min.','Qtd mín.'),T('Remise','Desconto'),T('ICMS inclus','ICMS incluído')]:[T('Qté min.','Qtd mín.'),T('Remise','Desconto'),'HT','TTC']).map((h,i)=><Text key={i} style={{color:MUTED,fontSize:11,fontFamily:fT,flex:i>1?1.5:1,textAlign:i>0?'right':'left'}}>{h}</Text>)}
               </View>
               {pal.map((p,i)=>(
                 <View key={i} style={{flexDirection:'row',paddingVertical:8,borderTopWidth:1,borderTopColor:BORDER,alignItems:'baseline'}}>
                   <Text style={{color:WHITE,fontSize:17,flex:1,fontFamily:fN}}>{p.qte} {T('bts','gfs')}</Text>
                   <Text style={{color:GOLD,fontSize:17,flex:1,textAlign:'right',fontFamily:fN}}>-{p.remise}%</Text>
-                  <Text style={{color:brl?WHITE:GOLD,fontSize:brl?17:18,flex:1.5,textAlign:'right',fontFamily:fN}}>{dev} {fmt(p.prix_ht)}</Text>
+                  {!brl&&<Text style={{color:GOLD,fontSize:18,flex:1.5,textAlign:'right',fontFamily:fN}}>{dev} {fmt(p.prix_ht)}</Text>}
                   <Text style={{color:brl?GOLD:WHITE,fontSize:brl?18:17,flex:1.5,textAlign:'right',fontFamily:fN}}>{dev} {fmt(p.prix_ttc)}</Text>
                 </View>
               ))}

@@ -21,7 +21,7 @@ const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appel
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
 
 // Version affichée à côté du titre : à changer à chaque publication
-const VERSION_APP='v34.7';
+const VERSION_APP='v34.8';
 // Paliers affichés dans l'onglet « Tarifs pro » (au-delà de 150 bouteilles : prix sur demande)
 const PALIERS_AFFICHES=[12,24,48,60,120,150];
 
@@ -162,7 +162,8 @@ export default function CatalogueScreen({navigation}){
         const coefsCanaux={};
         {
           const{data:cc,error:errCc}=await supabase.from('Coefficients Canaux').select('code,"Vin Min","Vin Max","Spiritueux Min","Spiritueux Max"').in('code',['CAVISTE','CHR']);
-          if(errCc)throw errCc;
+          // Une erreur sur les coefficients ne doit jamais bloquer la synchronisation des vins et des tarifs
+          if(errCc)console.warn('Coefficients Canaux',errCc.message);
           if(cc)cc.forEach(c=>{coefsCanaux[c.code]={vin:[parseFloat(c['Vin Min']),parseFloat(c['Vin Max'])],spi:[parseFloat(c['Spiritueux Min']),parseFloat(c['Spiritueux Max'])]};});
         }
         const paliersEurAutorises=(produitId)=>{

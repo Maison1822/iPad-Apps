@@ -21,7 +21,7 @@ const FILTRES=[{id:'pays',label:'Pays'},{id:'region',label:'Région'},{id:'appel
 const ONGLETS=[{id:'desc',label:'Description'},{id:'cepages',label:'Cépages'},{id:'vinif',label:'Vinification'},{id:'degustation',label:'Dégustation'},{id:'condit',label:'Conditionnements'},{id:'accords',label:'Accords'},{id:'prix',label:'Tarifs pro'}];
 
 // Version affichée à côté du titre : à changer à chaque publication
-const VERSION_APP='v34.8';
+const VERSION_APP='v34.9';
 // Paliers affichés dans l'onglet « Tarifs pro » (au-delà de 150 bouteilles : prix sur demande)
 const PALIERS_AFFICHES=[12,24,48,60,120,150];
 
@@ -58,7 +58,7 @@ export default function CatalogueScreen({navigation}){
   const [groupe,setGroupe]=useState('FR');
   // Vins du catalogue affiché (FR ou BR) ; toutes les listes et filtres travaillent sur ce groupe
   // Catalogue FR : prix en R$ (vente au Brésil). Catalogue BR : prix en € (vente en France/Europe).
-  const vins=useMemo(()=>vinsTous.filter(v=>AMERIQUE_SUD.includes(v.pays)===(groupe==='BR')).map(v=>groupe==='BR'
+  const vins=useMemo(()=>vinsTous.map(v=>groupe==='BR'
     ?{...v,_px:v.eur_public_ttc,_ht:v.eur_public_ht,_dev:'€',eur_paliers:paliersEur(v),brl_paliers:[],_ok:parseFloat(v.eur_public_ttc)>0&&paliersEur(v).length>0}
     :{...v,_px:v.brl_public_ttc,_ht:v.brl_public_ht,_dev:'R$'}),[vinsTous,groupe]);
   const [loading,setLoading]=useState(true);
@@ -143,11 +143,11 @@ export default function CatalogueScreen({navigation}){
         if(errAutEur)throw errAutEur;
         const autorisesEurMap={};
         if(autorisesEur)autorisesEur.forEach(a=>{autorisesEurMap[a.produit_id]=a.qtes||[];});
-        const brIds=data.filter(v=>AMERIQUE_SUD.includes(v.pays)).map(v=>v.produit_id);
+        const brIds=data.map(v=>v.produit_id); // tous les vins sont vendus dans les 2 pays
         const pvcEurMap={};
         if(brIds.length){
           const{data:pvc,error:errPvc}=await supabase.from('Prix de Vente Conseillés').select('*')
-            .eq('Devise','EUR').in('Produit_id',brIds).order('Valide depuis',{ascending:false,nullsFirst:false});
+            .eq('Devise','EUR').order('Valide depuis',{ascending:false,nullsFirst:false}).limit(5000);
           if(errPvc)throw errPvc;
           if(pvc)pvc.forEach(r=>{if(!pvcEurMap[r['Produit_id']])pvcEurMap[r['Produit_id']]=r;});
         }
@@ -161,10 +161,10 @@ export default function CatalogueScreen({navigation}){
         // Coefficients des fourchettes de prix conseillés : table "Coefficients Canaux" (aucune valeur en dur)
         const coefsCanaux={};
         {
-          const{data:cc,error:errCc}=await supabase.from('Coefficients Canaux').select('code,"Vin Min","Vin Max","Spiritueux Min","Spiritueux Max"').in('code',['CAVISTE','CHR']);
+          const{data:cc,error:errCc}=await supabase.from('Coefficients Canaux').select('code,pays,"Vin Min","Vin Max","Spiritueux Min","Spiritueux Max"').in('code',['CAVISTE','CHR']).in('pays',['FR','BR']);
           // Une erreur sur les coefficients ne doit jamais bloquer la synchronisation des vins et des tarifs
           if(errCc)console.warn('Coefficients Canaux',errCc.message);
-          if(cc)cc.forEach(c=>{coefsCanaux[c.code]={vin:[parseFloat(c['Vin Min']),parseFloat(c['Vin Max'])],spi:[parseFloat(c['Spiritueux Min']),parseFloat(c['Spiritueux Max'])]};});
+          if(cc)cc.forEach(c=>{(coefsCanaux[c.pays]=coefsCanaux[c.pays]||{})[c.code]={vin:[parseFloat(c['Vin Min']),parseFloat(c['Vin Max'])],spi:[parseFloat(c['Spiritueux Min']),parseFloat(c['Spiritueux Max'])]};});
         }
         const paliersEurAutorises=(produitId)=>{
           const r=pvcEurMap[produitId];
@@ -195,8 +195,8 @@ export default function CatalogueScreen({navigation}){
             ...v,
             brl_paliers: parsePaliers(v.brl_paliers), // déjà calculés et filtrés (marge) côté base
             coefs_canaux: coefsCanaux,
-            eur_palier_list: AMERIQUE_SUD.includes(v.pays)?paliersEurAutorises(v.produit_id):[],
-            eur_pro_ht: AMERIQUE_SUD.includes(v.pays)?(parseFloat(pvcEurMap[v.produit_id]?.['Prix Pro HT'])||null):null,
+            eur_palier_list: paliersEurAutorises(v.produit_id),
+            eur_pro_ht: parseFloat(pvcEurMap[v.produit_id]?.['Prix Pro HT'])||null,
           };
         }).filter(v=>autorisesMap[v.produit_id]||(parseFloat(v.brl_public_ttc)>0));
         setVins(filtered);
@@ -522,7 +522,7 @@ export default function CatalogueScreen({navigation}){
         // Nouveau modèle de prix (Cavistes / CHR), en R$ comme en €
         const chr=canalPrix==='chr';
         // Coefficients (min – max) lus dans "Coefficients Canaux" : vins/champagnes vs spiritueux
-        const cx=item.coefs_canaux||{};
+        const cx=(item.coefs_canaux||{})[brl?'BR':'FR']||{}; // coefficients du pays : R$ → BR, € → FR
         const pick=c=>c?(item.spiritueux?c.spi:c.vin):null;
         const coef={cav:pick(cx.CAVISTE),chr:pick(cx.CHR)};
         const coefOk=c=>Array.isArray(c)&&c.length===2&&c[0]>0&&c[1]>0;
